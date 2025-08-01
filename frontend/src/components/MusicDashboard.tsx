@@ -831,7 +831,7 @@ const MusicDashboard: React.FC = () => {
                   
                   // Redirect to re-authentication flow after a short delay
                   setTimeout(() => {
-                    fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true')
+                    fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true')
                       .then(res => res.json())
                       .then(data => {
                         window.location.href = data.auth_url;
@@ -844,7 +844,7 @@ const MusicDashboard: React.FC = () => {
                   }, 1000);
                 } else {
                   // Connect with standard redirect URI but force dialog
-                  const res = await fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true');
+                  const res = await fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true');
                   const data = await res.json();
                   window.location.href = data.auth_url;
                 }

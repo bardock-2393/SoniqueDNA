@@ -19,7 +19,7 @@ from routes.recommendations import recommendation_routes
 from routes.playlists import playlist_routes
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:8080', 'http://127.0.0.1:8080', 'http://15.207.204.90:8080'], supports_credentials=True)
+CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:8080', 'http://15.207.204.90:8080', 'http://15.207.204.90:8080'], supports_credentials=True)
 
 # Initialize services
 spotify_service = SpotifyService()
@@ -72,7 +72,7 @@ def exchange_token_direct():
             return jsonify({"error": "Missing code parameter"}), 400
         
         code = data["code"]
-        redirect_uri = data.get("redirect_uri", "http://127.0.0.1:8080/callback")
+        redirect_uri = data.get("redirect_uri", "http://15.207.204.90:8080/callback")
         
         # Exchange code for token
         token_data = spotify_service.exchange_token(code, redirect_uri)
@@ -224,7 +224,7 @@ def logout_direct():
             "force_reauth": True,
             "unique_state": unique_state,
             "session_id": session_id,
-            "reauth_url": f"http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            "reauth_url": f"http://localhost:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
         })
         
     except Exception as e:
@@ -243,7 +243,7 @@ def spotify_session_clear_direct():
             'success': True,
             'message': 'Spotify session cleared',
             'session_id': session_id,
-            'reauth_url': f"http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            'reauth_url': f"http://localhost:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

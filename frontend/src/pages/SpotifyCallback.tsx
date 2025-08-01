@@ -26,7 +26,7 @@ const SpotifyCallback = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           code,
-          redirect_uri: 'http://127.0.0.1:8080/callback',
+          redirect_uri: 'http://15.207.204.90:8080/callback',
           state: state // Pass state for verification if needed
         })
       })
