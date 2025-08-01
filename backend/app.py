@@ -34,39 +34,7 @@ app.register_blueprint(auth_routes, url_prefix='/auth')
 app.register_blueprint(recommendation_routes, url_prefix='/recommendations')
 app.register_blueprint(playlist_routes, url_prefix='/playlists')
 
-# Add callback route for Spotify authorization
-@app.route('/callback')
-def spotify_callback():
-    """Handle Spotify authorization callback - serve frontend page"""
-    # This route should serve the frontend callback page
-    # The frontend will handle the code exchange
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Spotify Authorization</title>
-        <meta http-equiv="refresh" content="0;url=https://soniquedna.deepsantoshwar.xyz/callback">
-    </head>
-    <body>
-        <p>Redirecting to SoniqueDNA...</p>
-        <script>
-            // Redirect to frontend with the authorization code
-            const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('code');
-            const state = urlParams.get('state');
-            const error = urlParams.get('error');
-            
-            if (error) {
-                window.location.href = 'https://soniquedna.deepsantoshwar.xyz/?error=' + error;
-            } else if (code) {
-                window.location.href = 'https://soniquedna.deepsantoshwar.xyz/callback?code=' + code + '&state=' + state;
-            } else {
-                window.location.href = 'https://soniquedna.deepsantoshwar.xyz/';
-            }
-        </script>
-    </body>
-    </html>
-    """
+
 
 # Add direct routes for frontend compatibility (matching old backend structure)
 @app.route('/spotify-auth-url', methods=['GET', 'POST'])
