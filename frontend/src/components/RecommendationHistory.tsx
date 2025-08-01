@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Loader2, History, Play, Calendar, Clock, Tag, Music, Trash2, Trash, CheckCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { apiUrl } from '@/config/env';
 
 interface HistoryItem {
   id: number;
@@ -54,7 +55,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setError(null);
     
     try {
-      const response = await fetch(`http://15.207.204.90:5500/recommendations/history/${userId}?limit=20`);
+      const response = await fetch(apiUrl(`/recommendations/history/${userId}?limit=20`));
       if (!response.ok) {
         throw new Error('Failed to load history');
       }
@@ -77,7 +78,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setLoadingArtists(prev => new Set(prev).add(artistName));
 
     try {
-      const response = await fetch('http://15.207.204.90:5500/recommendations/artist-details', {
+      const response = await fetch(apiUrl('/recommendations/artist-details'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +125,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     }
 
     try {
-      const response = await fetch(`http://15.207.204.90:5500/recommendations/history/${userId}/${historyItem.id}`, {
+      const response = await fetch(apiUrl(`/recommendations/history/${userId}/${historyItem.id}`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,7 +155,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setDeletingItem(historyItem.id);
 
     try {
-      const response = await fetch(`http://15.207.204.90:5500/user-history/${userId}/${historyItem.id}`, {
+      const response = await fetch(apiUrl(`/user-history/${userId}/${historyItem.id}`), {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -183,7 +184,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setSuccessMessage(null);
 
     try {
-      const response = await fetch(`http://15.207.204.90:5500/user-history/${userId}`, {
+      const response = await fetch(apiUrl(`/user-history/${userId}`), {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

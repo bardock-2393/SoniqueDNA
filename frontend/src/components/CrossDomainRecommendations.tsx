@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { ComicText } from './magicui/comic-text';
 import { crossDomainCache, cacheUtils } from '../utils/cacheManager';
+import { apiUrl } from '@/config/env';
 
 interface CrossDomainRecommendationsProps {
   userContext: string;
@@ -199,7 +200,7 @@ export default function CrossDomainRecommendations({
 
   const clearServerCache = async () => {
     try {
-      await fetch('http://15.207.204.90:5500/clear-cache', {
+      await fetch(apiUrl('/clear-cache'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -262,7 +263,7 @@ export default function CrossDomainRecommendations({
     setProgressInterval(interval);
 
     try {
-      const response = await fetch('http://15.207.204.90:5500/crossdomain-recommendations', {
+      const response = await fetch(apiUrl('/crossdomain-recommendations'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -48,7 +48,7 @@ def exchange_token():
             return jsonify({"error": "Missing code parameter"}), 400
         
         code = sanitize_string(data["code"])
-        redirect_uri = sanitize_string(data.get("redirect_uri", "http://15.207.204.90:8080/callback"))
+        redirect_uri = sanitize_string(data.get("redirect_uri", os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')))
         
         # Exchange code for token
         token_data = spotify_service.exchange_token(code, redirect_uri)
@@ -126,7 +126,7 @@ def logout():
             "force_reauth": True,
             "unique_state": unique_state,
             "session_id": session_id,
-            "reauth_url": f"http://15.207.204.90:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
+            "reauth_url": f"/auth/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
         
     except Exception as e:
@@ -145,7 +145,7 @@ def spotify_session_clear():
             'success': True,
             'message': 'Spotify session cleared',
             'session_id': session_id,
-            'reauth_url': f"http://15.207.204.90:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
+            'reauth_url': f"/auth/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500 

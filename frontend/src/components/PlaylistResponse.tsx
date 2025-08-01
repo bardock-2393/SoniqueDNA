@@ -10,6 +10,7 @@ import { Plus, Music, CheckCircle, AlertCircle, Sparkles } from "lucide-react";
 import { ComicText } from "./magicui/comic-text";
 import CacheIndicator from "./CacheIndicator";
 import CrossDomainRecommendations from "./CrossDomainRecommendations";
+import { apiUrl } from '@/config/env';
 
 // Qloo Power Showcase Component
 const QlooPowerShowcase = ({ data }: { data: PlaylistData }) => {
@@ -400,7 +401,7 @@ export default function PlaylistResponse({ data }: PlaylistResponseProps) {
         sortedPlaylist[index].url
       );
 
-      const response = await fetch('http://15.207.204.90:5500/create-playlist', {
+      const response = await fetch(apiUrl('/create-playlist'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

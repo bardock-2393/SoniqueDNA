@@ -1,0 +1,72 @@
+soniquedna.deepsantoshwar.xyz {
+    # Serve Vite's static build output
+    root * /home/ubuntu/SoniqueDNA/frontend/dist
+    file_server
+
+    # Reverse proxy for all API endpoints
+    @api {
+        path /spotify-auth-url
+        path /exchange-token
+        path /refresh-token
+        path /check-token
+        path /spotify-profile
+        path /logout
+        path /spotify-session-clear
+        path /musicrecommendation
+        path /music-recommendation
+        path /crossdomain-recommendations
+        path /crossdomain-progress/*
+        path /create-playlist
+        path /test-database
+        path /user-analytics/*
+        path /user-history/*
+        path /clear-cache
+        path /recommendations/*
+        path /auth/*
+        path /playlists/*
+    }
+    reverse_proxy @api http://localhost:5500
+
+    # Handle Spotify callback
+    reverse_proxy /callback http://localhost:5500
+
+    # Security headers
+    header {
+        # Content Security Policy
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.deepsantoshwar.xyz; frame-ancestors 'none';"
+        
+        # Other security headers
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        
+        # Remove server information
+        -Server
+        -X-Powered-By
+    }
+
+    # Handle SPA routing (serve index.html for non-file requests)
+    @notFile {
+        not path *.js
+        not path *.css
+        not path *.ico
+        not path *.png
+        not path *.jpg
+        not path *.jpeg
+        not path *.gif
+        not path *.svg
+        not path *.woff
+        not path *.woff2
+        not path *.ttf
+        not path *.eot
+    }
+    rewrite @notFile /index.html
+
+    # Logging
+    log {
+        output file /var/log/caddy/soniquedna.log
+        format json
+    }
+} 

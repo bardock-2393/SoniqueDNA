@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ComicText } from '@/components/magicui/comic-text';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl, getSpotifyRedirectUri } from '@/config/env';
 
 const SpotifyCallback = () => {
   const navigate = useNavigate();
@@ -21,12 +22,12 @@ const SpotifyCallback = () => {
     
     if (code) {
       // Exchange code for access token via backend
-      fetch('http://15.207.204.90:5500/exchange-token', {
+      fetch(apiUrl('/exchange-token'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           code,
-          redirect_uri: 'http://15.207.204.90:8080/callback',
+          redirect_uri: getSpotifyRedirectUri(),
           state: state // Pass state for verification if needed
         })
       })
