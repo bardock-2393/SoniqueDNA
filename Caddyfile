@@ -32,8 +32,8 @@ soniquedna.deepsantoshwar.xyz {
 
     # Security headers
     header {
-        # Content Security Policy
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.deepsantoshwar.xyz; frame-ancestors 'none';"
+        # Content Security Policy - Updated to allow Google Fonts
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.deepsantoshwar.xyz; frame-ancestors 'none';"
         
         # Other security headers
         X-Content-Type-Options "nosniff"

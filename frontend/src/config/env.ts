@@ -6,9 +6,9 @@ export const config = {
     redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'https://soniquedna.deepsantoshwar.xyz/callback',
   },
   
-  // Backend Configuration
+  // Backend Configuration - Development mode uses EC2 IP
   backend: {
-    url: import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://soniquedna.deepsantoshwar.xyz'),
+    url: import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? 'http://15.207.204.90:5500' : 'https://soniquedna.deepsantoshwar.xyz'),
   },
   
   // App Configuration
