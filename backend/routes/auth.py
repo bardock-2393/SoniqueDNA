@@ -6,37 +6,38 @@ import os
 auth_routes = Blueprint('auth', __name__)
 spotify_service = SpotifyService()
 
-@auth_routes.route('/spotify-auth-url', methods=['GET', 'POST'])
-def spotify_auth_url():
-    """Generate Spotify OAuth URL with state parameter"""
-    try:
-        # Handle both GET (query params) and POST (JSON body)
-        if request.method == 'GET':
-            redirect_uri = request.args.get('redirect_uri')
-            force_reauth = request.args.get('force_reauth', 'false').lower() == 'true'
-            session_id = request.args.get('session_id')
-        else:
-            data = request.get_json()
-            redirect_uri = data.get("redirect_uri") if data else None
-            force_reauth = data.get("force_reauth", False) if data else False
-            session_id = data.get("session_id") if data else None
-        
-        if not redirect_uri:
-            return jsonify({"error": "Missing redirect_uri parameter"}), 400
-        
-        redirect_uri = sanitize_string(redirect_uri)
-        
-        # Generate auth URL with re-authentication support
-        auth_data = spotify_service.generate_auth_url(redirect_uri, force_reauth=force_reauth, session_id=session_id)
-        
-        return jsonify({
-            "auth_url": auth_data["auth_url"],
-            "state": auth_data["state"]
-        })
-        
-    except Exception as e:
-        print(f"Auth URL generation error: {e}")
-        return jsonify({"error": "Failed to generate auth URL"}), 500
+# Commented out - duplicate route already exists in app.py
+# @auth_routes.route('/spotify-auth-url', methods=['GET', 'POST'])
+# def spotify_auth_url():
+#     """Generate Spotify OAuth URL with state parameter"""
+#     try:
+#         # Handle both GET (query params) and POST (JSON body)
+#         if request.method == 'GET':
+#             redirect_uri = request.args.get('redirect_uri')
+#             force_reauth = request.args.get('force_reauth', 'false').lower() == 'true'
+#             session_id = request.args.get('session_id')
+#         else:
+#             data = request.get_json()
+#             redirect_uri = data.get("redirect_uri") if data else None
+#             force_reauth = data.get("force_reauth", False) if data else False
+#             session_id = data.get("session_id") if data else None
+#         
+#         if not redirect_uri:
+#             return jsonify({"error": "Missing redirect_uri parameter"}), 400
+#         
+#         redirect_uri = sanitize_string(redirect_uri)
+#         
+#         # Generate auth URL with re-authentication support
+#         auth_data = spotify_service.generate_auth_url(redirect_uri, force_reauth=force_reauth, session_id=session_id)
+#         
+#         return jsonify({
+#             "auth_url": auth_data["auth_url"],
+#             "state": auth_data["state"]
+#         })
+#         
+#     except Exception as e:
+#         print(f"Auth URL generation error: {e}")
+#         return jsonify({"error": "Failed to generate auth URL"}), 500
 
 @auth_routes.route('/exchange-token', methods=['POST'])
 def exchange_token():
