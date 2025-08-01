@@ -1473,5 +1473,13 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
-    # For EC2 development server - bind to all interfaces
-    app.run(host='0.0.0.0', port=5500, debug=True) 
+    # For production - run on HTTPS port 443
+    import ssl
+    
+    # Create SSL context
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain('/etc/letsencrypt/live/soniquedna.deepsantoshwar.xyz/fullchain.pem',
+                           '/etc/letsencrypt/live/soniquedna.deepsantoshwar.xyz/privkey.pem')
+    
+    # Run on HTTPS port 443
+    app.run(host='0.0.0.0', port=443, ssl_context=context, debug=False) 

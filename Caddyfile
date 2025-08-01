@@ -1,88 +1,31 @@
 soniquedna.deepsantoshwar.xyz {
-    # Explicitly route API paths to backend
-    handle /spotify-auth-url* {
-        reverse_proxy http://localhost:5500
+    # Route API calls to backend FIRST (before any file serving)
+    @api {
+        path /spotify-auth-url*
+        path /exchange-token*
+        path /refresh-token*
+        path /check-token*
+        path /spotify-profile*
+        path /logout*
+        path /spotify-session-clear*
+        path /musicrecommendation*
+        path /music-recommendation*
+        path /crossdomain-recommendations*
+        path /crossdomain-progress*
+        path /create-playlist*
+        path /test-database*
+        path /user-analytics*
+        path /user-history*
+        path /clear-cache*
+        path /recommendations*
+        path /auth*
+        path /playlists*
+        path /callback*
+        path /health*
     }
     
-    handle /exchange-token* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /refresh-token* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /check-token* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /spotify-profile* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /logout* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /spotify-session-clear* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /musicrecommendation* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /music-recommendation* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /crossdomain-recommendations* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /crossdomain-progress* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /create-playlist* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /test-database* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /user-analytics* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /user-history* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /clear-cache* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /recommendations* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /auth* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /playlists* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /callback* {
-        reverse_proxy http://localhost:5500
-    }
-    
-    handle /health* {
-        reverse_proxy http://localhost:5500
-    }
+    # Proxy API calls to backend
+    reverse_proxy @api http://localhost:5500
     
     # Serve frontend files for everything else
     root * /home/ubuntu/SoniqueDNA/frontend/dist
