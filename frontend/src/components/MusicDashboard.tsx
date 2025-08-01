@@ -831,31 +831,22 @@ const MusicDashboard: React.FC = () => {
                   
                   // Redirect to re-authentication flow after a short delay
                   setTimeout(() => {
-                    if (window.SpotifyAuth) {
-                      window.SpotifyAuth.redirectToSpotify(true);
-                    } else {
-                      // Fallback to original method
-                      fetch('http://15.207.204.90:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true')
-                        .then(res => res.json())
-                        .then(data => {
-                          window.location.href = data.auth_url;
-                        })
-                        .catch(error => {
-                          console.error('Error getting auth URL:', error);
-                          window.location.reload();
-                        });
-                    }
+                    fetch('http://15.207.204.90:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true')
+                      .then(res => res.json())
+                      .then(data => {
+                        window.location.href = data.auth_url;
+                      })
+                      .catch(error => {
+                        console.error('Error getting auth URL:', error);
+                        // Fallback to page reload if auth URL fails
+                        window.location.reload();
+                      });
                   }, 1000);
                 } else {
-                  // Connect using external script if available
-                  if (window.SpotifyAuth) {
-                    window.SpotifyAuth.redirectToSpotify(true);
-                  } else {
-                    // Fallback to original method
-                    const res = await fetch('http://15.207.204.90:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true');
-                    const data = await res.json();
-                    window.location.href = data.auth_url;
-                  }
+                  // Connect with standard redirect URI but force dialog
+                  const res = await fetch('http://15.207.204.90:5500/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true');
+                  const data = await res.json();
+                  window.location.href = data.auth_url;
                 }
               }}
               disabled={checkingToken}
