@@ -53,7 +53,7 @@ const NewArtistsIndicator: React.FC<NewArtistsIndicatorProps> = ({
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:5500/recommendations/new-artists/${userId}?days=7`);
+      const response = await fetch(`http://15.207.204.90:5500/recommendations/new-artists/${userId}?days=7`);
       if (!response.ok) {
         throw new Error('Failed to load new artists');
       }
@@ -100,7 +100,7 @@ const NewArtistsIndicator: React.FC<NewArtistsIndicatorProps> = ({
     setLoadingArtists(prev => new Set(prev).add(artistName));
 
     try {
-      const response = await fetch('http://localhost:5500/recommendations/artist-details', {
+      const response = await fetch('http://15.207.204.90:5500/recommendations/artist-details', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

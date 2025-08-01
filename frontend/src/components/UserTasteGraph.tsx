@@ -46,7 +46,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:5500/recommendations/taste-analytics/${userId}`);
+      const response = await fetch(`http://15.207.204.90:5500/recommendations/taste-analytics/${userId}`);
       if (!response.ok) {
         throw new Error('Failed to load taste analytics');
       }
@@ -306,7 +306,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
           <Button 
             onClick={async () => {
               try {
-                await fetch(`http://localhost:5500/recommendations/analytics/clear/${userId}`, { method: 'POST' });
+                await fetch(`http://15.207.204.90:5500/recommendations/analytics/clear/${userId}`, { method: 'POST' });
                 loadAnalytics();
               } catch (err) {
                 console.error('Failed to clear analytics:', err);
@@ -321,7 +321,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
           <Button 
             onClick={async () => {
               try {
-                await fetch(`http://localhost:5500/recommendations/analytics/populate-sample/${userId}`, { method: 'POST' });
+                await fetch(`http://15.207.204.90:5500/recommendations/analytics/populate-sample/${userId}`, { method: 'POST' });
                 loadAnalytics();
               } catch (err) {
                 console.error('Failed to populate sample analytics:', err);

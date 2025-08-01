@@ -400,7 +400,7 @@ export default function PlaylistResponse({ data }: PlaylistResponseProps) {
         sortedPlaylist[index].url
       );
 
-      const response = await fetch('http://localhost:5500/create-playlist', {
+      const response = await fetch('http://15.207.204.90:5500/create-playlist', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

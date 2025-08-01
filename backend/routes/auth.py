@@ -126,7 +126,7 @@ def logout():
             "force_reauth": True,
             "unique_state": unique_state,
             "session_id": session_id,
-            "reauth_url": f"http://localhost:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
+            "reauth_url": f"http://15.207.204.90:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
         })
         
     except Exception as e:
@@ -145,7 +145,7 @@ def spotify_session_clear():
             'success': True,
             'message': 'Spotify session cleared',
             'session_id': session_id,
-            'reauth_url': f"http://localhost:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
+            'reauth_url': f"http://15.207.204.90:5500/auth/spotify-auth-url?redirect_uri=http://15.207.204.90:8080/callback&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500 

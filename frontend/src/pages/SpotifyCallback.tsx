@@ -21,7 +21,7 @@ const SpotifyCallback = () => {
     
     if (code) {
       // Exchange code for access token via backend
-      fetch('http://localhost:5500/exchange-token', {
+      fetch('http://15.207.204.90:5500/exchange-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
