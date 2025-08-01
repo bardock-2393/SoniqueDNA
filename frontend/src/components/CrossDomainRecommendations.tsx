@@ -95,6 +95,7 @@ interface CrossDomainData {
   user_country?: string;
   generated_timestamp?: string;
   from_cache?: boolean;
+  cache_buster?: string;
 }
 
 // Cache configuration
@@ -105,15 +106,19 @@ const generateRequestHash = (
   userContext: string,
   musicArtists: string[],
   topScoredArtists: string[],
-  userTags: string[]
+  userTags: string[],
+  forceRefresh: boolean = false
 ): string => {
-  const requestData = {
+  const data = {
     userContext,
     musicArtists: musicArtists.sort(),
     topScoredArtists: topScoredArtists.sort(),
-    userTags: userTags.sort()
+    userTags: userTags.sort(),
+    // Add timestamp for cache busting when force refresh is used
+    timestamp: forceRefresh ? Date.now() : Math.floor(Date.now() / 300000) * 300000 // 5-minute cache window
   };
-  return crossDomainCache.generateRequestHash(requestData);
+  
+  return btoa(JSON.stringify(data));
 };
 
 const domainConfig = {
@@ -221,7 +226,8 @@ export default function CrossDomainRecommendations({
       userContext,
       musicArtists,
       topScoredArtists || [],
-      userTags || []
+      userTags || [],
+      forceRefresh
     );
 
     // Check cache first (unless forcing refresh)
@@ -649,6 +655,13 @@ export default function CrossDomainRecommendations({
           Explore movies, TV shows, podcasts, books, and more artists that match your vibe
         </p>
         
+        {/* Helpful Note */}
+        <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-3 mt-3 max-w-md mx-auto">
+          <p className="text-xs text-blue-700 font-comic">
+            💡 <strong>Getting the same recommendations?</strong> Click "Refresh (Clear Cache)" below to discover fresh content!
+          </p>
+        </div>
+        
         {/* Cache Status and Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
           {/* Cache Status Indicator */}
@@ -738,6 +751,21 @@ export default function CrossDomainRecommendations({
                 {domain}: {Array.isArray(items) ? items.length : 0} items
               </p>
             ))}
+            {recommendations.generated_timestamp && (
+              <p className="text-xs text-gray-500 mt-2">
+                Generated: {recommendations.generated_timestamp}
+              </p>
+            )}
+            {recommendations.cache_buster && (
+              <p className="text-xs text-gray-500">
+                Cache Buster: {recommendations.cache_buster}
+              </p>
+            )}
+            {recommendations.from_cache && (
+              <p className="text-xs text-blue-500 font-bold">
+                ⚠️ Data from cache - click refresh for fresh results
+              </p>
+            )}
           </div>
 
           {/* Show all domains with data */}

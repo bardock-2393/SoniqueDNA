@@ -129,25 +129,56 @@ class GeminiService:
         
         # Get tags for the specific domain
         if domain in domain_tags:
-            # Select a category based on context or use default
+            # Enhanced context analysis with randomization
             context_lower = context.lower()
+            available_categories = list(domain_tags[domain].keys())
             
-            if any(word in context_lower for word in ['romantic', 'love', 'passionate']):
-                category = "romantic" if "romantic" in domain_tags[domain] else list(domain_tags[domain].keys())[0]
-            elif any(word in context_lower for word in ['action', 'thriller', 'exciting']):
-                category = "action" if "action" in domain_tags[domain] else list(domain_tags[domain].keys())[0]
-            elif any(word in context_lower for word in ['comedy', 'funny', 'humorous']):
-                category = "comedy" if "comedy" in domain_tags[domain] else list(domain_tags[domain].keys())[0]
-            elif any(word in context_lower for word in ['mystery', 'suspense', 'dark']):
-                category = "mystery" if "mystery" in domain_tags[domain] else list(domain_tags[domain].keys())[0]
-            else:
-                # Use first available category
-                category = list(domain_tags[domain].keys())[0]
+            # Try to match context to specific categories
+            matched_category = None
             
-            return domain_tags[domain][category][:5]  # Return exactly 5 tags
+            if any(word in context_lower for word in ['romantic', 'love', 'passionate', 'emotional']):
+                matched_category = "romantic" if "romantic" in available_categories else None
+            elif any(word in context_lower for word in ['action', 'thriller', 'exciting', 'energetic']):
+                matched_category = "action" if "action" in available_categories else None
+            elif any(word in context_lower for word in ['comedy', 'funny', 'humorous', 'lighthearted']):
+                matched_category = "comedy" if "comedy" in available_categories else None
+            elif any(word in context_lower for word in ['mystery', 'suspense', 'dark', 'thriller']):
+                matched_category = "mystery" if "mystery" in available_categories else None
+            elif any(word in context_lower for word in ['family', 'wholesome', 'uplifting']):
+                matched_category = "family" if "family" in available_categories else None
+            elif any(word in context_lower for word in ['educational', 'learning', 'knowledge']):
+                matched_category = "educational" if "educational" in available_categories else None
+            elif any(word in context_lower for word in ['business', 'professional', 'success']):
+                matched_category = "business" if "business" in available_categories else None
+            elif any(word in context_lower for word in ['health', 'wellness', 'fitness']):
+                matched_category = "health" if "health" in available_categories else None
+            elif any(word in context_lower for word in ['pop', 'mainstream', 'popular']):
+                matched_category = "pop" if "pop" in available_categories else None
+            elif any(word in context_lower for word in ['rock', 'energetic', 'powerful']):
+                matched_category = "rock" if "rock" in available_categories else None
+            elif any(word in context_lower for word in ['hip_hop', 'rap', 'urban']):
+                matched_category = "hip_hop" if "hip_hop" in available_categories else None
+            elif any(word in context_lower for word in ['electronic', 'dance', 'techno']):
+                matched_category = "electronic" if "electronic" in available_categories else None
+            elif any(word in context_lower for word in ['jazz', 'smooth', 'sophisticated']):
+                matched_category = "jazz" if "jazz" in available_categories else None
+            elif any(word in context_lower for word in ['classical', 'orchestral', 'elegant']):
+                matched_category = "classical" if "classical" in available_categories else None
+            
+            # If no specific match, use randomization to avoid always returning the same category
+            if matched_category is None:
+                import random
+                # Use timestamp-based randomization to ensure variety across requests
+                random.seed(int(time.time() * 1000) % 10000)  # Use milliseconds for more variety
+                matched_category = random.choice(available_categories)
+            
+            return domain_tags[domain][matched_category][:5]  # Return exactly 5 tags
         
-        # Fallback to general tags
-        return ["drama", "romantic", "adventure", "comedy", "mystery"]
+        # Fallback to general tags with randomization
+        import random
+        fallback_tags = ["drama", "romantic", "adventure", "comedy", "mystery", "thriller", "action", "emotional"]
+        random.shuffle(fallback_tags)
+        return fallback_tags[:5]
     
     def generate_genre_based_tags(self, artist_genres: List[str], context: str = "", user_country: str = None, domain: str = "artist") -> List[str]:
         """Generate domain-specific tags based on artist genres - limit to 5 most relevant"""
@@ -426,8 +457,129 @@ class GeminiService:
         except Exception as e:
             print(f"Error generating music-based cross-domain tags: {e}")
         
-        # Fallback to domain-specific tags
-        return self.generate_domain_specific_tags(domain, user_context)
+        # Enhanced fallback with randomization to prevent same results
+        import random
+        
+        # Add some variety based on the domain and context
+        context_lower = user_context.lower()
+        
+        # Create domain-specific fallback tags with randomization
+        fallback_tags = []
+        
+        if domain == "movie":
+            all_movie_tags = [
+                "drama", "romantic", "action", "comedy", "thriller",
+                "adventure", "mystery", "crime", "family", "suspense",
+                "love", "emotional", "exciting", "funny", "dark",
+                "romance", "entertaining", "popular", "classic", "modern",
+                "sci_fi", "horror", "animation", "documentary", "biography",
+                "war", "western", "musical", "fantasy", "historical",
+                "indie", "foreign", "art_house", "experimental", "cult"
+            ]
+        elif domain == "tv_show":
+            all_tv_tags = [
+                "drama", "romantic", "comedy", "reality", "thriller",
+                "action", "mystery", "crime", "family", "suspense",
+                "love", "emotional", "exciting", "funny", "dark",
+                "romance", "entertaining", "popular", "classic", "modern",
+                "sci_fi", "horror", "animation", "documentary", "biography",
+                "war", "western", "musical", "fantasy", "historical",
+                "indie", "foreign", "art_house", "experimental", "cult",
+                "sitcom", "soap_opera", "game_show", "talk_show", "news"
+            ]
+        elif domain == "podcast":
+            all_podcast_tags = [
+                "educational", "informative", "knowledge", "learning", "insightful",
+                "comedy", "funny", "humorous", "entertaining", "lighthearted",
+                "news", "current_events", "politics", "serious", "informative",
+                "business", "entrepreneurship", "success", "motivational", "professional",
+                "health", "wellness", "fitness", "lifestyle", "self_improvement"
+            ]
+        elif domain == "book":
+            all_book_tags = [
+                "romance", "romantic", "love", "passionate", "emotional",
+                "mystery", "thriller", "suspense", "detective", "crime",
+                "fantasy", "adventure", "magical", "epic", "imaginative",
+                "self_help", "motivational", "inspirational", "personal_growth", "success",
+                "fiction", "drama", "compelling", "engaging", "emotional"
+            ]
+        elif domain == "artist":
+            all_artist_tags = [
+                "pop", "mainstream", "popular", "upbeat", "catchy",
+                "rock", "energetic", "powerful", "guitar", "band",
+                "hip_hop", "rap", "urban", "rhythm", "beats",
+                "electronic", "dance", "techno", "synth", "beats",
+                "jazz", "smooth", "sophisticated", "instrumental", "classy"
+            ]
+        else:
+            # Generic tags for unknown domains
+            all_artist_tags = ["drama", "romantic", "adventure", "comedy", "mystery", "thriller", "action", "emotional"]
+        
+        # Use the appropriate tag list
+        if domain == "movie":
+            tag_pool = all_movie_tags
+        elif domain == "tv_show":
+            tag_pool = all_tv_tags
+        elif domain == "podcast":
+            tag_pool = all_podcast_tags
+        elif domain == "book":
+            tag_pool = all_book_tags
+        elif domain == "artist":
+            tag_pool = all_artist_tags
+        else:
+            tag_pool = all_artist_tags  # fallback
+        
+        # Add context-based filtering
+        if any(word in context_lower for word in ['romantic', 'love', 'passionate']):
+            romantic_tags = [tag for tag in tag_pool if any(word in tag for word in ['romantic', 'love', 'passionate', 'emotional'])]
+            if romantic_tags:
+                fallback_tags.extend(romantic_tags[:3])
+        
+        if any(word in context_lower for word in ['energetic', 'upbeat', 'party']):
+            energetic_tags = [tag for tag in tag_pool if any(word in tag for word in ['energetic', 'upbeat', 'exciting', 'powerful'])]
+            if energetic_tags:
+                fallback_tags.extend(energetic_tags[:3])
+        
+        if any(word in context_lower for word in ['cultural', 'traditional', 'indian']):
+            cultural_tags = [tag for tag in tag_pool if any(word in tag for word in ['cultural', 'traditional', 'indian'])]
+            if cultural_tags:
+                fallback_tags.extend(cultural_tags[:2])
+        
+        # Fill remaining slots with proven common tags
+        remaining_slots = 5 - len(fallback_tags)
+        if remaining_slots > 0:
+            # Use timestamp-based randomization for variety
+            random.seed(int(time.time() * 1000) % 10000)
+            
+            # Prioritize common, proven tags that work well with Qloo
+            proven_tags = ["drama", "romantic", "comedy", "action", "thriller", "mystery", "crime", "family"]
+            available_proven = [tag for tag in proven_tags if tag in tag_pool and tag not in fallback_tags]
+            
+            if available_proven:
+                # Use proven tags first
+                fallback_tags.extend(random.sample(available_proven, min(remaining_slots, len(available_proven))))
+                remaining_slots = 5 - len(fallback_tags)
+            
+            # Fill any remaining slots with other available tags
+            if remaining_slots > 0:
+                available_tags = [tag for tag in tag_pool if tag not in fallback_tags]
+                if available_tags:
+                    # Add more randomization by shuffling the available tags
+                    random.shuffle(available_tags)
+                    fallback_tags.extend(random.sample(available_tags, min(remaining_slots, len(available_tags))))
+        
+        # Ensure we have exactly 5 tags, prioritizing proven tags
+        if len(fallback_tags) < 5:
+            proven_fillers = ["drama", "romantic", "comedy", "action", "thriller", "mystery", "crime", "family"]
+            available_fillers = [tag for tag in proven_fillers if tag in tag_pool and tag not in fallback_tags]
+            if available_fillers:
+                fallback_tags.extend(random.sample(available_fillers, min(5 - len(fallback_tags), len(available_fillers))))
+        
+        # Final fallback to ensure 5 tags
+        if len(fallback_tags) < 5:
+            fallback_tags.extend(random.sample(tag_pool, 5 - len(fallback_tags)))
+        
+        return fallback_tags[:5]
     
     def filter_and_rank_tags_for_music(self, tags: List[str], user_context: str, user_country: str, location: str = None) -> List[str]:
         """Filter and rank tags for music recommendations"""

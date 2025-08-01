@@ -11,7 +11,7 @@ class QlooService:
         self.base_url = "https://hackathon.api.qloo.com/v2"
         self.headers = {"X-API-Key": self.api_key}
     
-    def get_tag_ids_fast(self, tags: List[str]) -> List[str]:
+    def get_tag_ids_fast(self, tags: List[str], domain: str = None) -> List[str]:
         """Get tag IDs efficiently - search Qloo database for existing tags (limit to 8)"""
         tag_ids = []
         successful_tags = []
@@ -85,15 +85,17 @@ class QlooService:
         if len(tag_ids) < 4:
             print(f"Only found {len(tag_ids)} tags, trying fallback tags...")
             
-            # Determine domain from tags or use general fallback
-            domain = "artist"  # default
-            if any(tag in ["drama", "romantic", "action", "comedy", "family"] for tag in tags):
-                domain = "movie"
-            elif any(tag in ["entertainment", "interviews", "music"] for tag in tags):
-                domain = "podcast"
-            elif any(tag in ["romance", "fiction", "literary"] for tag in tags):
-                domain = "book"
+            # Use provided domain or determine from tags
+            if not domain:
+                domain = "artist"  # default
+                if any(tag in ["drama", "romantic", "action", "comedy", "family"] for tag in tags):
+                    domain = "movie"
+                elif any(tag in ["entertainment", "interviews", "music"] for tag in tags):
+                    domain = "podcast"
+                elif any(tag in ["romance", "fiction", "literary"] for tag in tags):
+                    domain = "book"
             
+            print(f"Using fallback tags for domain: {domain}")
             fallback_list = fallback_tags.get(domain, ["drama", "romantic", "cultural", "entertainment", "contemporary"])
             
             for fallback_tag in fallback_list:
@@ -215,10 +217,16 @@ class QlooService:
             params = {
                 "filter.type": f"urn:entity:{entity_type}",
                 "filter.tags": ",".join(tag_ids[:5]),
-                "filter.popularity.min": 0.05,  # Very low threshold to get more results
-                "limit": max(limit * 6, 60),  # Get much more to ensure we have enough recommendations
+                "filter.popularity.min": 0.01,  # Even lower threshold to get more diverse results
+                "limit": max(limit * 10, 100),  # Get much more to ensure we have enough recommendations
                 "sort": "relevance"  # Sort by relevance, not popularity
             }
+            
+            print(f"Qloo API request for {domain}:")
+            print(f"  URL: {url}")
+            print(f"  Entity type: urn:entity:{entity_type}")
+            print(f"  Tag IDs: {tag_ids[:5]}")
+            print(f"  Limit: {max(limit * 6, 60)}")
             
             # Add location-based signals if provided
             if location:
@@ -234,9 +242,20 @@ class QlooService:
                 data = response.json()
                 entities = data.get("results", {}).get("entities", [])  # Use correct path
                 print(f"Received {len(entities)} entities for domain: {domain}")
+                print(f"Response data keys: {list(data.keys())}")
+                if "results" in data:
+                    print(f"Results keys: {list(data['results'].keys())}")
+                if entities:
+                    print(f"First entity sample: {entities[0]}")
                 
                 recommendations = []
-                for entity in entities[:limit * 3]:  # Process more entities to get enough recommendations
+                # Randomize the order of entities to get different results each time
+                import random
+                random.seed(int(time.time() * 1000) % 10000)  # Use timestamp for variety
+                shuffled_entities = entities.copy()
+                random.shuffle(shuffled_entities)
+                
+                for entity in shuffled_entities[:limit * 3]:  # Process more entities to get enough recommendations
                     # Extract properties based on domain type
                     properties = entity.get("properties", {})
                     

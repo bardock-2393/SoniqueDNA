@@ -1080,7 +1080,22 @@ def crossdomain_recommendations_direct():
         # Step 3: Generate tags based on music recommendation data
         # Combine user tags, music artists, and top scored artists for better context
         combined_artists = list(set(music_artists + top_scored_artists))
-        context = f"cross-domain recommendations based on {user_context} music taste"
+        
+        # Differentiate between home page and discover more recommendations
+        is_home_page = user_context == "music discovery and cross-domain recommendations"
+        
+        if is_home_page:
+            # Home page: Use broader, more general recommendations
+            context = f"home page cross-domain recommendations based on general music taste"
+            # Add more variety for home page
+            cache_buster = int(time.time() * 1000) % 2000  # More variety
+        else:
+            # Discover more: Use more specific, context-aware recommendations
+            context = f"discover more cross-domain recommendations based on {user_context} music taste"
+            # Add cache-busting parameter to ensure variety
+            cache_buster = int(time.time() * 1000) % 1000  # Use milliseconds for variety
+        
+        context = f"{context} {cache_buster}"
         
         # Step 4: Process all domains with enhanced tags
         domains = ["movie", "tv_show", "podcast", "book", "artist"]
@@ -1096,14 +1111,23 @@ def crossdomain_recommendations_direct():
         for domain in domains:
             try:
                 # Generate enhanced tags using music recommendation data
-                print(f"Generating enhanced tags for domain: {domain}")
-                domain_tags = gemini_service.generate_music_based_cross_domain_tags(
-                    user_tags, combined_artists, user_context, user_country, domain
-                )
+                print(f"\n=== Processing Domain: {domain} ===")
+                
+                if is_home_page:
+                    # Home page: Use more general, popular tags
+                    domain_tags = gemini_service.generate_music_based_cross_domain_tags(
+                        ["popular", "mainstream", "trending"], combined_artists, "general entertainment", user_country, domain
+                    )
+                else:
+                    # Discover more: Use specific, context-aware tags
+                    domain_tags = gemini_service.generate_music_based_cross_domain_tags(
+                        user_tags, combined_artists, user_context, user_country, domain
+                    )
+                
                 print(f"Domain {domain} enhanced tags: {domain_tags}")
                 
                 # Get tag IDs for this domain
-                tag_ids = qloo_service.get_tag_ids_fast(domain_tags)
+                tag_ids = qloo_service.get_tag_ids_fast(domain_tags, domain)
                 print(f"Domain {domain} tag IDs: {tag_ids}")
                 
                 # Get recommendations for this domain with location support
@@ -1113,8 +1137,19 @@ def crossdomain_recommendations_direct():
                 frontend_domain = domain_mapping[domain]
                 recommendations_by_domain[frontend_domain] = domain_recommendations[:max(limit, 10)]
                 print(f"Domain {domain} -> {frontend_domain}: {len(domain_recommendations)} recommendations")
+                
+                # Debug: Show first few recommendations
+                if domain_recommendations:
+                    print(f"Sample recommendations for {domain}:")
+                    for i, rec in enumerate(domain_recommendations[:3]):
+                        print(f"  {i+1}. {rec.get('name', 'Unknown')} (Type: {rec.get('type', 'Unknown')})")
+                else:
+                    print(f"No recommendations found for {domain}")
+                    
             except Exception as e:
                 print(f"Domain {domain} error: {e}")
+                import traceback
+                traceback.print_exc()
                 frontend_domain = domain_mapping[domain]
                 recommendations_by_domain[frontend_domain] = []
         
@@ -1132,8 +1167,10 @@ def crossdomain_recommendations_direct():
             "recommendations_by_domain": recommendations_by_domain,
             "total_domains": len(domains_with_data),
             "recommendations_per_domain": limit,
+            "recommendation_type": "home_page" if is_home_page else "discover_more",
             "from_cache": False,
             "generated_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "cache_buster": cache_buster,  # Add cache buster to response
             "location_used": location if location else "Global",
             "location_radius": location_radius if location else None,
             "user_country": user_country,
@@ -1148,13 +1185,113 @@ def crossdomain_recommendations_direct():
                 "location_based": location is not None,
                 "music_based": True,
                 "top_scored_artists_used": len(top_scored_artists),
-                "user_tags_used": len(user_tags)
+                "user_tags_used": len(user_tags),
+                "cache_buster_used": cache_buster,
+                "is_home_page": is_home_page,
+                "context_used": context
             }
         })
         
     except Exception as e:
         print(f"Cross-domain recommendations error: {e}")
         return jsonify({"error": "Failed to get cross-domain recommendations"}), 500
+
+@app.route('/test-crossdomain-simple', methods=['POST'])
+def test_crossdomain_simple():
+    """Test endpoint for cross-domain recommendations without Spotify auth"""
+    start_time = time.time()
+    
+    try:
+        data = request.get_json()
+        
+        # Use test data if not provided
+        user_context = data.get("user_context", "romantic evening")
+        music_artists = data.get("music_artists", ["Ed Sheeran", "Adele", "Sam Smith"])
+        user_tags = data.get("user_tags", ["romantic", "emotional", "passionate"])
+        limit = min(int(data.get("limit", 5)), 10)
+        user_country = data.get("user_country", "US")
+        
+        print(f"[TEST] User context: {user_context}")
+        print(f"[TEST] Music artists: {music_artists}")
+        print(f"[TEST] User tags: {user_tags}")
+        
+        # Step 1: Process all domains with enhanced tags
+        domains = ["movie", "tv_show", "podcast", "book", "artist"]
+        domain_mapping = {
+            "movie": "movie",
+            "tv_show": "TV show", 
+            "podcast": "podcast",
+            "book": "book",
+            "artist": "music artist"
+        }
+        recommendations_by_domain = {}
+        
+        for domain in domains:
+            try:
+                # Generate enhanced tags using music recommendation data
+                print(f"\n=== Processing Domain: {domain} ===")
+                domain_tags = gemini_service.generate_music_based_cross_domain_tags(
+                    user_tags, music_artists, user_context, user_country, domain
+                )
+                print(f"Domain {domain} enhanced tags: {domain_tags}")
+                
+                # Get tag IDs for this domain
+                tag_ids = qloo_service.get_tag_ids_fast(domain_tags, domain)
+                print(f"Domain {domain} tag IDs: {tag_ids}")
+                
+                # Get recommendations for this domain
+                domain_recommendations = qloo_service.get_cross_domain_recommendations(
+                    tag_ids, domain, max(limit, 10), None, None
+                )
+                frontend_domain = domain_mapping[domain]
+                recommendations_by_domain[frontend_domain] = domain_recommendations[:max(limit, 10)]
+                print(f"Domain {domain} -> {frontend_domain}: {len(domain_recommendations)} recommendations")
+                
+                # Debug: Show first few recommendations
+                if domain_recommendations:
+                    print(f"Sample recommendations for {domain}:")
+                    for i, rec in enumerate(domain_recommendations[:3]):
+                        print(f"  {i+1}. {rec.get('name', 'Unknown')} (Type: {rec.get('type', 'Unknown')})")
+                else:
+                    print(f"No recommendations found for {domain}")
+                    
+            except Exception as e:
+                print(f"Domain {domain} error: {e}")
+                import traceback
+                traceback.print_exc()
+                frontend_domain = domain_mapping[domain]
+                recommendations_by_domain[frontend_domain] = []
+        
+        response_time = time.time() - start_time
+        
+        # Count domains with recommendations
+        domains_with_data = [domain for domain in domain_mapping.values() if recommendations_by_domain.get(domain)]
+        
+        print(f"Final response - Domains with data: {domains_with_data}")
+        print(f"Total recommendations: {sum(len(recs) for recs in recommendations_by_domain.values())}")
+        
+        return jsonify({
+            "recommendations_by_domain": recommendations_by_domain,
+            "total_domains": len(domains_with_data),
+            "recommendations_per_domain": limit,
+            "from_cache": False,
+            "generated_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "user_context": user_context,
+            "music_artists": music_artists,
+            "user_tags": user_tags,
+            "analysis": {
+                "tags_used": "enhanced_music_based",
+                "user_country": user_country,
+                "response_time": round(response_time, 2),
+                "domains_processed": list(domain_mapping.values()),
+                "music_based": True,
+                "user_tags_used": len(user_tags)
+            }
+        })
+        
+    except Exception as e:
+        print(f"Test cross-domain recommendations error: {e}")
+        return jsonify({"error": "Failed to get test cross-domain recommendations"}), 500
 
 @app.route('/crossdomain-progress/<user_id>', methods=['GET'])
 def crossdomain_progress_direct(user_id):
