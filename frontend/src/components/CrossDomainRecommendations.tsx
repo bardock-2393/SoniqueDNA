@@ -26,6 +26,7 @@ import {
 import { ComicText } from './magicui/comic-text';
 import { crossDomainCache, cacheUtils } from '../utils/cacheManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { apiUrl } from '@/config/env';
 
 interface CrossDomainRecommendationsProps {
   userContext: string;
