@@ -192,7 +192,7 @@ const NewArtistsIndicator: React.FC<NewArtistsIndicatorProps> = ({
 
     try {
       // Use the new batch endpoint for better performance
-      const response = await fetch('http://localhost:5500/artist-details-batch', {
+      const response = await fetch(apiUrl('/artist-details-batch'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -246,7 +246,7 @@ const NewArtistsIndicator: React.FC<NewArtistsIndicatorProps> = ({
         // Fallback to individual requests if batch fails
         const promises = artistNames.map(async (artistName) => {
           try {
-            const response = await fetch('http://localhost:5500/artist-details', {
+            const response = await fetch(apiUrl('/artist-details'), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
