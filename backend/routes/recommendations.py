@@ -36,7 +36,6 @@ def music_recommendation():
         spotify_token = sanitize_string(data["spotify_token"])
         user_context = sanitize_string(data.get("user_context", ""))
         limit = min(int(data.get("limit", 15)), 50)  # Cap at 50
-        cache_bust = data.get("cache_bust", False)  # Allow frontend to request fresh data
         
         # Step 1: Get comprehensive user data from Spotify
         user_data = spotify_service.get_user_data_fast(spotify_token)
@@ -52,19 +51,8 @@ def music_recommendation():
         # Step 2: Create user session for tracking
         session_id = db_service.create_user_session(user_id, spotify_token, user_country, user_context)
         
-        # Step 3: Check cache first with enhanced cache key for variety
-        # Add time-based variation to prevent repetitive results
-        import time
-        cache_variation = int(time.time() * 1000) % 1000  # Add time-based variation
-        cache_key = hashlib.md5(f"{user_id}_{user_context}_{user_country}_{cache_variation}".encode()).hexdigest()
-        
-        # Only check cache if not forcing refresh or cache busting
-        force_refresh = data.get("force_refresh", False)
-        if not force_refresh and not cache_bust:
-            cached_result = db_service.get_cached_recommendation(cache_key)
-            if cached_result:
-                print(f"[CACHE HIT] Returning cached result for user {user_id}")
-                return jsonify(cached_result)
+        # Step 3: No caching - always generate fresh recommendations
+        print(f"[NO CACHE] Generating fresh recommendations for user {user_id}")
         
         # Step 4: Analyze context with Gemini
         context_analysis = gemini_service.analyze_context_fast(user_context)
@@ -271,9 +259,7 @@ def music_recommendation():
             }
         }
         
-        # Step 17: Cache the result
-        artist_names = [rec.get("name", "") for rec in recommendations if rec.get("name")]
-        db_service.store_cached_recommendation(cache_key, user_context, user_country, artist_names, response_data)
+        # Step 17: No caching - skip cache storage
         
         print(f"[SUCCESS] Music recommendations completed in {round(response_time, 2)}s")
         return jsonify(response_data)
