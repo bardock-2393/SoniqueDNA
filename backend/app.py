@@ -29,9 +29,9 @@ spotify_service = SpotifyService()
 qloo_service = QlooService()
 gemini_service = GeminiService()
 
-# Initialize cache for cross-domain recommendations (home page only)
-crossdomain_cache = {}
-CACHE_EXPIRY = 3600  # 1 hour in seconds
+# CACHING DISABLED: Initialize cache for cross-domain recommendations (home page only)
+# crossdomain_cache = {}
+# CACHE_EXPIRY = 3600  # 1 hour in seconds
 
 
 
@@ -1328,27 +1328,27 @@ def crossdomain_recommendations_direct():
         # Differentiate between home page and discover more recommendations
         is_home_page = user_context == "music discovery and cross-domain recommendations"
         
-        # Check cache for home page requests only
-        if is_home_page:
-            # Generate cache key based on user country and location
-            cache_key = f"crossdomain_home_{user_country}_{location}"
-            current_time = time.time()
-            
-            # Check if we have cached data and it's not expired
-            if cache_key in crossdomain_cache:
-                cached_data = crossdomain_cache[cache_key]
-                if current_time - cached_data['timestamp'] < CACHE_EXPIRY:
-                    print(f"[CACHE HIT] Returning cached cross-domain recommendations for home page (age: {int(current_time - cached_data['timestamp'])}s)")
-                    # Mark as from cache
-                    cached_data['data']['from_cache'] = True
-                    cached_data['data']['cache_age_seconds'] = int(current_time - cached_data['timestamp'])
-                    cached_data['data']['cache_expires_in'] = int(CACHE_EXPIRY - (current_time - cached_data['timestamp']))
-                    return jsonify(cached_data['data'])
-                else:
-                    print(f"[CACHE EXPIRED] Removing expired cache entry for key: {cache_key}")
-                    del crossdomain_cache[cache_key]
-            
-            print(f"[CACHE MISS] No valid cache found for home page, generating fresh recommendations")
+        # CACHING DISABLED: Check cache for home page requests only
+        # if is_home_page:
+        #     # Generate cache key based on user country and location
+        #     cache_key = f"crossdomain_home_{user_country}_{location}"
+        #     current_time = time.time()
+        #     
+        #     # Check if we have cached data and it's not expired
+        #     if cache_key in crossdomain_cache:
+        #         cached_data = crossdomain_cache[cache_key]
+        #         if current_time - cached_data['timestamp'] < CACHE_EXPIRY:
+        #             print(f"[CACHE HIT] Returning cached cross-domain recommendations for home page (age: {int(current_time - cached_data['timestamp'])}s)")
+        #             # Mark as from cache
+        #             cached_data['data']['from_cache'] = True
+        #             cached_data['data']['cache_age_seconds'] = int(current_time - cached_data['timestamp'])
+        #             cached_data['data']['cache_expires_in'] = int(CACHE_EXPIRY - (current_time - cached_data['timestamp']))
+        #             return jsonify(cached_data['data'])
+        #         else:
+        #             print(f"[CACHE EXPIRED] Removing expired cache entry for key: {cache_key}")
+        #             del crossdomain_cache[cache_key]
+        #     
+        #     print(f"[CACHE MISS] No valid cache found for home page, generating fresh recommendations")
         
         if is_home_page:
             # Home page: Use broader, more general recommendations
@@ -1460,15 +1460,15 @@ def crossdomain_recommendations_direct():
             }
         }
         
-        # Cache the response for home page requests only
-        if is_home_page:
-            cache_key = f"crossdomain_home_{user_country}_{location}"
-            crossdomain_cache[cache_key] = {
-                'data': response_data,
-                'timestamp': time.time()
-            }
-            print(f"[CACHE STORED] Cached cross-domain recommendations for home page with key: {cache_key}")
-            print(f"[CACHE STORED] Cache will expire in {CACHE_EXPIRY} seconds")
+        # CACHING DISABLED: Cache the response for home page requests only
+        # if is_home_page:
+        #     cache_key = f"crossdomain_home_{user_country}_{location}"
+        #     crossdomain_cache[cache_key] = {
+        #         'data': response_data,
+        #         'timestamp': time.time()
+        #     }
+        #     print(f"[CACHE STORED] Cached cross-domain recommendations for home page with key: {cache_key}")
+        #     print(f"[CACHE STORED] Cache will expire in {CACHE_EXPIRY} seconds")
         
         return jsonify(response_data)
         
