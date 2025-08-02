@@ -766,14 +766,6 @@ export default function PlaylistResponse({ data }: PlaylistResponseProps) {
             className="bg-yellow-100 border-4 border-black comic-shadow max-w-[95vw] sm:max-w-6xl mx-auto p-4 sm:p-6 max-h-[90vh] overflow-y-auto"
             aria-describedby="cross-domain-description"
           >
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl font-bold text-black comic-shadow text-center">
-                Cross-Domain Recommendations
-              </DialogTitle>
-              <p id="cross-domain-description" className="text-xs text-gray-600 text-center mt-2">
-                Discover movies, books, TV shows, and podcasts based on your music taste
-              </p>
-            </DialogHeader>
             <CrossDomainRecommendations
               userContext={userContext}
               musicArtists={data.qloo_artists.slice(0, 5).map(artist => typeof artist === 'string' ? artist : artist.name)}

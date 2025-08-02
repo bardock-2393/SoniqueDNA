@@ -1,113 +1,158 @@
 import re
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-def extract_playlist_id_from_url(spotify_url: str) -> Optional[str]:
-    """Extract playlist ID from Spotify URL"""
+def extract_playlist_id_from_url(playlist_url: str) -> Optional[str]:
+    """Extract playlist ID from Spotify playlist URL"""
+    if not playlist_url:
+        return None
+    
+    # Handle different URL formats
     patterns = [
         r'spotify\.com/playlist/([a-zA-Z0-9]+)',
-        r'spotify\.com/playlist/([a-zA-Z0-9]+)\?',
-        r'playlist/([a-zA-Z0-9]+)'
+        r'playlist/([a-zA-Z0-9]+)',
+        r'([a-zA-Z0-9]{22})'  # Spotify IDs are 22 characters
     ]
     
     for pattern in patterns:
-        match = re.search(pattern, spotify_url)
+        match = re.search(pattern, playlist_url)
         if match:
             return match.group(1)
     
     return None
 
-def rank_recommendations_fast(entities: List[Dict], user_preferences: Dict) -> List[Dict]:
-    """Simple scoring algorithm for fast ranking"""
-    if not entities:
+def rank_recommendations_fast(recommendations: List[Dict], user_preferences: Dict = None) -> List[Dict]:
+    """Fast ranking of recommendations based on user preferences"""
+    if not recommendations:
         return []
     
-    for entity in entities:
+    # Simple scoring based on popularity and user preferences
+    for rec in recommendations:
         score = 0.0
         
-        # Base popularity score
-        popularity = entity.get("popularity", 0)
-        score += popularity * 0.3
+        # Base score from popularity
+        popularity = rec.get('popularity', 0.5)
+        score += popularity * 0.4
         
-        # User preference match (if available)
-        if user_preferences:
-            # Simple keyword matching
-            entity_name = entity.get("name", "").lower()
-            user_artists = [artist.lower() for artist in user_preferences.get("artists", [])]
-            
-            for artist in user_artists:
-                if artist in entity_name or entity_name in artist:
-                    score += 0.4
-                    break
+        # Genre preference bonus
+        if user_preferences and 'genres' in user_preferences:
+            user_genres = [g.lower() for g in user_preferences['genres']]
+            rec_genre = rec.get('primary_genre', '').lower()
+            if rec_genre in user_genres:
+                score += 0.3
         
-        entity["relevance_score"] = score
+        # Artist preference bonus
+        if user_preferences and 'artists' in user_preferences:
+            user_artists = [a.lower() for a in user_preferences['artists']]
+            rec_artist = rec.get('name', '').lower()
+            if rec_artist in user_artists:
+                score += 0.3
+        
+        rec['ranking_score'] = score
     
-    # Sort by relevance score
-    return sorted(entities, key=lambda x: x.get("relevance_score", 0), reverse=True)
+    # Sort by ranking score
+    return sorted(recommendations, key=lambda x: x.get('ranking_score', 0), reverse=True)
 
 def apply_cultural_intelligence_fast(recommendations: List[Dict], user_country: str) -> List[Dict]:
-    """Lightweight cultural filtering using predefined rules"""
-    if not user_country or not recommendations:
+    """Apply cultural intelligence to recommendations (fast version)"""
+    if not recommendations or not user_country:
         return recommendations
     
     # Simple cultural adjustments based on country
-    cultural_boosts = {
-        "US": ["pop", "hip hop", "country"],
-        "UK": ["pop", "rock", "indie"],
-        "JP": ["j-pop", "j-rock", "anime"],
-        "KR": ["k-pop", "k-hip hop"],
-        "IN": ["bollywood", "indian pop"],
-        "BR": ["samba", "bossa nova", "brazilian pop"],
-        "MX": ["mexican pop", "ranchera", "norteño"],
-        "FR": ["french pop", "chanson"],
-        "DE": ["german pop", "schlager"],
-        "IT": ["italian pop", "opera"]
+    cultural_boost = {
+        'IN': 0.2,  # India
+        'PK': 0.2,  # Pakistan
+        'BD': 0.2,  # Bangladesh
+        'LK': 0.2,  # Sri Lanka
+        'NP': 0.2,  # Nepal
+        'KR': 0.15, # South Korea
+        'JP': 0.15, # Japan
+        'CN': 0.15, # China
+        'MX': 0.1,  # Mexico
+        'BR': 0.1,  # Brazil
     }
     
-    boost_tags = cultural_boosts.get(user_country.upper(), [])
+    boost = cultural_boost.get(user_country.upper(), 0.0)
     
-    for entity in recommendations:
-        entity_name = entity.get("name", "").lower()
-        for tag in boost_tags:
-            if tag.lower() in entity_name:
-                entity["relevance_score"] = entity.get("relevance_score", 0) + 0.2
-                break
+    for rec in recommendations:
+        current_score = rec.get('ranking_score', 0.0)
+        rec['ranking_score'] = current_score + boost
     
     return recommendations
 
-def calculate_context_relevance_score(track: Dict, context_type: str, search_query: str = "") -> float:
-    """Calculate relevance score for track in context"""
-    score = 0.0
-    
-    # Base score from popularity
-    popularity = track.get("popularity", 0)
-    score += popularity * 0.3
-    
-    # Context matching
-    track_name = track.get("name", "").lower()
-    artist_name = track.get("artist", "").lower()
-    
-    context_keywords = {
-        "workout": ["energetic", "fast", "motivational", "pump", "energy"],
-        "study": ["calm", "focus", "concentration", "ambient", "instrumental"],
-        "party": ["dance", "upbeat", "fun", "celebration", "vibe"],
-        "relaxation": ["chill", "calm", "peaceful", "ambient", "soft"],
-        "romantic": ["love", "romantic", "intimate", "passionate", "sweet"]
+def get_fallback_recommendations(context_type: str) -> List[Dict]:
+    """Get fallback recommendations when APIs fail"""
+    fallback_data = {
+        "party": [
+            {"name": "The Weeknd", "popularity": 0.9, "primary_genre": "pop"},
+            {"name": "Dua Lipa", "popularity": 0.8, "primary_genre": "pop"},
+            {"name": "Bad Bunny", "popularity": 0.9, "primary_genre": "latin"},
+            {"name": "Taylor Swift", "popularity": 0.9, "primary_genre": "pop"},
+            {"name": "Drake", "popularity": 0.9, "primary_genre": "hip hop"}
+        ],
+        "study": [
+            {"name": "Lofi Girl", "popularity": 0.7, "primary_genre": "ambient"},
+            {"name": "Chillhop Music", "popularity": 0.6, "primary_genre": "jazz"},
+            {"name": "Peaceful Piano", "popularity": 0.6, "primary_genre": "classical"},
+            {"name": "Deep Focus", "popularity": 0.7, "primary_genre": "ambient"},
+            {"name": "Nature Sounds", "popularity": 0.5, "primary_genre": "ambient"}
+        ],
+        "workout": [
+            {"name": "The Weeknd", "popularity": 0.9, "primary_genre": "pop"},
+            {"name": "Dua Lipa", "popularity": 0.8, "primary_genre": "pop"},
+            {"name": "Post Malone", "popularity": 0.8, "primary_genre": "pop"},
+            {"name": "Ariana Grande", "popularity": 0.9, "primary_genre": "pop"},
+            {"name": "Drake", "popularity": 0.9, "primary_genre": "hip hop"}
+        ],
+        "relaxation": [
+            {"name": "Lofi Girl", "popularity": 0.7, "primary_genre": "ambient"},
+            {"name": "Chillhop Music", "popularity": 0.6, "primary_genre": "jazz"},
+            {"name": "Peaceful Piano", "popularity": 0.6, "primary_genre": "classical"},
+            {"name": "Nature Sounds", "popularity": 0.5, "primary_genre": "ambient"},
+            {"name": "Ambient Music", "popularity": 0.6, "primary_genre": "ambient"}
+        ],
+        "romantic": [
+            {"name": "Ed Sheeran", "popularity": 0.8, "primary_genre": "pop"},
+            {"name": "Adele", "popularity": 0.9, "primary_genre": "pop"},
+            {"name": "John Legend", "popularity": 0.7, "primary_genre": "r&b"},
+            {"name": "Sam Smith", "popularity": 0.8, "primary_genre": "pop"},
+            {"name": "Lewis Capaldi", "popularity": 0.7, "primary_genre": "pop"}
+        ]
     }
     
-    keywords = context_keywords.get(context_type, [])
-    for keyword in keywords:
-        if keyword in track_name or keyword in artist_name:
-            score += 0.3
-            break
+    return fallback_data.get(context_type, fallback_data["party"])
+
+def sort_by_relevance(entities: List[Dict], user_preferences: Dict = None) -> List[Dict]:
+    """Sort entities by relevance to user preferences"""
+    if not entities:
+        return []
     
-    # Search query matching
-    if search_query:
-        query_lower = search_query.lower()
-        if query_lower in track_name or query_lower in artist_name:
-            score += 0.4
+    # Simple relevance scoring
+    for entity in entities:
+        relevance_score = 0.0
+        
+        # Base score from popularity
+        popularity = entity.get('popularity', 0.5)
+        relevance_score += popularity * 0.3
+        
+        # Genre match bonus
+        if user_preferences and 'genres' in user_preferences:
+            user_genres = [g.lower() for g in user_preferences['genres']]
+            entity_genre = entity.get('primary_genre', '').lower()
+            if entity_genre in user_genres:
+                relevance_score += 0.4
+        
+        # Artist match bonus
+        if user_preferences and 'artists' in user_preferences:
+            user_artists = [a.lower() for a in user_preferences['artists']]
+            entity_artist = entity.get('name', '').lower()
+            if entity_artist in user_artists:
+                relevance_score += 0.3
+        
+        entity['relevance_score'] = relevance_score
     
-    return min(score, 1.0)
+    # Sort by relevance score
+    return sorted(entities, key=lambda x: x.get('relevance_score', 0), reverse=True)
 
 def get_context_keywords(context_type: str) -> List[str]:
     """Get keywords for context type"""
@@ -139,113 +184,34 @@ def get_cultural_keywords(user_country: str, location: str = None) -> List[str]:
     
     return cultural_keywords.get(user_country.upper(), ["international", "global"])
 
-def sort_by_relevance(entities: List[Dict], user_artists: List[str], user_genres: List[str], 
-                     context_type: str, user_country: str, location: str = None) -> List[Dict]:
-    """Sort entities by relevance score"""
-    if not entities:
-        return []
-    
-    for entity in entities:
-        score = 0.0
-        
-        # Popularity score
-        popularity = entity.get("popularity", 0)
-        score += popularity * 0.2
-        
-        # User preference match
-        entity_name = entity.get("name", "").lower()
-        for artist in user_artists:
-            if artist.lower() in entity_name or entity_name in artist.lower():
-                score += 0.3
-                break
-        
-        # Genre match
-        entity_genres = entity.get("genres", [])
-        for genre in user_genres:
-            if genre.lower() in [g.lower() for g in entity_genres]:
-                score += 0.2
-                break
-        
-        # Context match
-        context_keywords = get_context_keywords(context_type)
-        for keyword in context_keywords:
-            if keyword.lower() in entity_name:
-                score += 0.2
-                break
-        
-        # Cultural match
-        cultural_keywords = get_cultural_keywords(user_country, location)
-        for keyword in cultural_keywords:
-            if keyword.lower() in entity_name:
-                score += 0.1
-                break
-        
-        entity["relevance_score"] = score
-    
-    return sorted(entities, key=lambda x: x.get("relevance_score", 0), reverse=True)
-
-def get_fallback_recommendations(context_type: str) -> List[Dict]:
-    """Get fallback recommendations when APIs fail"""
-    fallback_artists = {
-        "workout": [
-            {"name": "The Weeknd", "popularity": 0.9},
-            {"name": "Dua Lipa", "popularity": 0.8},
-            {"name": "Post Malone", "popularity": 0.8},
-            {"name": "Ariana Grande", "popularity": 0.9},
-            {"name": "Drake", "popularity": 0.9}
-        ],
-        "study": [
-            {"name": "Lofi Girl", "popularity": 0.7},
-            {"name": "Chillhop Music", "popularity": 0.6},
-            {"name": "Spotify", "popularity": 0.8},
-            {"name": "Peaceful Piano", "popularity": 0.6},
-            {"name": "Deep Focus", "popularity": 0.7}
-        ],
-        "party": [
-            {"name": "The Weeknd", "popularity": 0.9},
-            {"name": "Dua Lipa", "popularity": 0.8},
-            {"name": "Bad Bunny", "popularity": 0.9},
-            {"name": "Taylor Swift", "popularity": 0.9},
-            {"name": "Drake", "popularity": 0.9}
-        ],
-        "relaxation": [
-            {"name": "Lofi Girl", "popularity": 0.7},
-            {"name": "Chillhop Music", "popularity": 0.6},
-            {"name": "Peaceful Piano", "popularity": 0.6},
-            {"name": "Nature Sounds", "popularity": 0.5},
-            {"name": "Ambient Music", "popularity": 0.6}
-        ],
-        "romantic": [
-            {"name": "Ed Sheeran", "popularity": 0.8},
-            {"name": "Adele", "popularity": 0.9},
-            {"name": "John Legend", "popularity": 0.7},
-            {"name": "Sam Smith", "popularity": 0.8},
-            {"name": "Lewis Capaldi", "popularity": 0.7}
-        ]
-    }
-    
-    return fallback_artists.get(context_type, fallback_artists["party"])
-
-def validate_input_data(data: Dict, required_fields: List[str]) -> bool:
-    """Validate input data has required fields"""
-    if not data:
-        return False
+def validate_input_data(data: Dict) -> Tuple[bool, str]:
+    """Validate input data for recommendations"""
+    required_fields = ['user_context', 'user_country']
     
     for field in required_fields:
-        if field not in data or not data[field]:
-            return False
+        if field not in data:
+            return False, f"Missing required field: {field}"
+        
+        if not data[field] or not isinstance(data[field], str):
+            return False, f"Invalid {field}: must be non-empty string"
     
-    return True
+    # Validate user_context length
+    if len(data['user_context']) > 500:
+        return False, "user_context too long (max 500 characters)"
+    
+    # Validate user_country format (should be 2-letter country code)
+    if len(data['user_country']) != 2:
+        return False, "user_country must be 2-letter country code"
+    
+    return True, "Valid"
 
-def sanitize_string(text: str) -> str:
+def sanitize_string(input_string: str) -> str:
     """Sanitize string input"""
-    if not text:
+    if not input_string:
         return ""
     
     # Remove potentially dangerous characters
-    sanitized = re.sub(r'[<>"\']', '', text)
-    return sanitized.strip()
-
-def get_timestamp() -> float:
-    """Get current timestamp"""
-    return time.time() 
+    sanitized = input_string.replace("'", "").replace('"', "").replace(";", "").replace("--", "")
+    
+    # Limit length
+    return sanitized[:1000] 

@@ -232,7 +232,12 @@ class QlooService:
             if location:
                 params["signal.location.query"] = location
                 params["signal.location.radius"] = location_radius
-                print(f"Using location-based recommendations for: {location} (radius: {location_radius}m)")
+                print(f"[QLOO LOCATION] Using location-based recommendations for: {location} (radius: {location_radius}m)")
+                print(f"[QLOO LOCATION] Location parameters added to API request")
+                print(f"[QLOO LOCATION] Full params with location: {params}")
+            else:
+                print(f"[QLOO LOCATION] No location provided - using global recommendations")
+                print(f"[QLOO LOCATION] Full params without location: {params}")
             
             print(f"Requesting {domain} recommendations with tags: {tag_ids[:3]}...")
             print(f"Using entity type: urn:entity:{entity_type}")
@@ -246,18 +251,122 @@ class QlooService:
                 if "results" in data:
                     print(f"Results keys: {list(data['results'].keys())}")
                 if entities:
-                    print(f"First entity sample: {entities[0]}")
+                    print(f"First entity sample: [Entity data truncated]")
+                    # Debug: Check if entities have location-related data
+                    if location:
+                        print(f"[QLOO LOCATION] Checking if entities have location data...")
+                        location_entities = 0
+                        for entity in entities[:5]:  # Check first 5 entities
+                            if entity.get('properties', {}).get('country') or entity.get('properties', {}).get('location'):
+                                location_entities += 1
+                                print(f"[QLOO LOCATION] Entity '{entity.get('name', 'Unknown')}' has location data: {entity.get('properties', {}).get('country', 'N/A')}")
+                        print(f"[QLOO LOCATION] Found {location_entities}/5 entities with location data")
                 
                 recommendations = []
-                # Randomize the order of entities to get different results each time
+                # Enhanced randomization for better variety
                 import random
-                random.seed(int(time.time() * 1000) % 10000)  # Use timestamp for variety
+                import time
+                
+                # Use more sophisticated randomization
+                random.seed(int(time.time() * 1000000) % 1000000)  # More granular seed
+                
+                # Get more entities to work with for better variety
+                max_entities = min(len(entities), limit * 10)  # Get up to 10x more entities
                 shuffled_entities = entities.copy()
                 random.shuffle(shuffled_entities)
                 
-                for entity in shuffled_entities[:limit * 3]:  # Process more entities to get enough recommendations
+                # Prioritize most relevant tag when we have 5 tags
+                if len(tag_ids) >= 5:
+                    # Use the first (most relevant) tag for primary sorting
+                    primary_tag = tag_ids[0]
+                    print(f"[SORTING DEBUG] Using primary tag for sorting: {primary_tag}")
+                    
+                    # Sort entities by relevance to the primary tag
+                    def calculate_primary_tag_relevance(entity):
+                        entity_tags = entity.get('tags', [])
+                        # Check if primary tag is in entity tags
+                        for tag in entity_tags:
+                            if isinstance(tag, str) and primary_tag.lower() in tag.lower():
+                                return 1.0
+                            elif isinstance(tag, dict) and 'name' in tag and primary_tag.lower() in tag['name'].lower():
+                                return 1.0
+                            elif isinstance(tag, dict) and 'tag' in tag and primary_tag.lower() in tag['tag'].lower():
+                                return 1.0
+                        return 0.0
+                    
+                    # Sort by primary tag relevance first, then by popularity
+                    sorted_by_primary_tag = sorted(shuffled_entities, 
+                                                 key=lambda x: (calculate_primary_tag_relevance(x), x.get('popularity', 0)), 
+                                                 reverse=True)
+                    selected_entities = sorted_by_primary_tag[:max_entities]
+                    
+                else:
+                    # Use different selection strategies for variety when we have fewer tags
+                    selection_strategy = random.choice(['random', 'popularity', 'relevance', 'diversity'])
+                    
+                    if selection_strategy == 'random':
+                        # Pure random selection
+                        selected_entities = shuffled_entities[:max_entities]
+                    elif selection_strategy == 'popularity':
+                        # Sort by popularity and take from different popularity ranges
+                        sorted_by_popularity = sorted(shuffled_entities, key=lambda x: x.get('popularity', 0), reverse=True)
+                        # Take from high, medium, and low popularity ranges
+                        high_pop = sorted_by_popularity[:max_entities//3]
+                        medium_pop = sorted_by_popularity[max_entities//3:2*max_entities//3]
+                        low_pop = sorted_by_popularity[2*max_entities//3:]
+                        selected_entities = random.sample(high_pop, min(len(high_pop), limit//3)) + \
+                                          random.sample(medium_pop, min(len(medium_pop), limit//3)) + \
+                                          random.sample(low_pop, min(len(low_pop), limit//3))
+                    elif selection_strategy == 'relevance':
+                        # Sort by relevance (affinity score) and take diverse range
+                        sorted_by_relevance = sorted(shuffled_entities, key=lambda x: x.get('affinity_score', 0), reverse=True)
+                        selected_entities = sorted_by_relevance[:max_entities]
+                    else:  # diversity
+                        # Try to maximize diversity by avoiding similar items
+                        selected_entities = []
+                        used_tags = set()
+                        for entity in shuffled_entities[:max_entities]:
+                            # Ensure tags are strings, not dictionaries
+                            raw_tags = entity.get('tags', [])
+                            entity_tags = set()
+                            for tag in raw_tags:
+                                if isinstance(tag, str):
+                                    entity_tags.add(tag)
+                                elif isinstance(tag, dict) and 'name' in tag:
+                                    entity_tags.add(tag['name'])
+                                elif isinstance(tag, dict) and 'tag' in tag:
+                                    entity_tags.add(tag['tag'])
+                            # If entity has different tags, include it
+                            if not entity_tags.intersection(used_tags) or random.random() < 0.3:
+                                selected_entities.append(entity)
+                                used_tags.update(entity_tags)
+                            if len(selected_entities) >= limit * 3:
+                                break
+                
+                # Shuffle again for final variety
+                random.shuffle(selected_entities)
+                
+                for entity in selected_entities[:limit * 3]:  # Process more entities to get enough recommendations
                     # Extract properties based on domain type
                     properties = entity.get("properties", {})
+                    
+                    # Clean tags to ensure they are strings
+                    raw_tags = entity.get("tags", [])
+                    clean_tags = []
+                    for tag in raw_tags:
+                        if isinstance(tag, str):
+                            clean_tags.append(tag)
+                        elif isinstance(tag, dict) and 'name' in tag:
+                            clean_tags.append(tag['name'])
+                        elif isinstance(tag, dict) and 'tag' in tag:
+                            clean_tags.append(tag['tag'])
+                    
+                    # Debug: Log image data for troubleshooting
+                    image_url = properties.get("image", {}).get("url") if properties.get("image") else None
+                    if image_url:
+                        print(f"[DEBUG] Found image URL for {entity.get('name')}: {image_url}")
+                    else:
+                        print(f"[DEBUG] No image URL found for {entity.get('name')}")
                     
                     recommendation = {
                         "id": entity.get("id"),
@@ -266,11 +375,11 @@ class QlooService:
                         "popularity": entity.get("popularity", 0),
                         "affinity_score": round(entity.get("popularity", 0) * 0.8, 2),
                         "cultural_relevance": entity.get("cultural_relevance", 0),
-                        "tags": entity.get("tags", []),
+                        "tags": clean_tags,
                         "location_based": location is not None,
                         "location": location if location else None,
                         "properties": {
-                            "image": {"url": properties.get("image", {}).get("url")} if properties.get("image") else None,
+                            "image": {"url": image_url} if image_url else None,
                             "description": properties.get("description"),
                             "url": properties.get("url"),
                             "external_urls": properties.get("external_urls", {})
@@ -324,8 +433,8 @@ class QlooService:
                 print(f"Processed {len(final_recommendations)} recommendations for domain: {domain}")
                 return final_recommendations
             else:
-                print(f"Qloo API error for domain {domain}: {response.status_code} - {response.text}")
-                print(f"Response content: {response.text[:500]}...")
+                print(f"Qloo API error for domain {domain}: {response.status_code}")
+                print(f"Response content: [JSON response truncated]")
             
         except Exception as e:
             print(f"Cross-domain recommendations error for {domain}: {e}")
@@ -441,10 +550,25 @@ class QlooService:
             
             print(f"Getting enhanced recommendations with {len(tag_ids)} tag IDs: {tag_ids[:3]}")
             if location:
-                print(f"📍 Location-aware recommendations for: {location}")
+                print(f"📍 Location-aware recommendations for: {location} (radius: {location_radius}m)")
+                print(f"[QLOO LOCATION] Using location-based API call for music recommendations")
+            else:
+                print(f"[QLOO LOCATION] No location provided - using global recommendations")
             
-            # First try the standard recommendations endpoint
-            recommendations = self.get_recommendations_fast(tag_ids, limit * 2)
+            # Use location-aware API call if location is provided
+            if location:
+                recommendations = self.get_music_recommendations_with_user_signals(
+                    tag_ids=tag_ids,
+                    user_artist_ids=[artist.get('id', '') for artist in (user_artists or []) if isinstance(artist, dict) and artist.get('id')],
+                    user_track_ids=[track.get('id', '') for track in (user_tracks or []) if isinstance(track, dict) and track.get('id')],
+                    user_country=None,  # We'll use location directly
+                    location=location,
+                    location_radius=location_radius,
+                    limit=limit * 2
+                )
+            else:
+                # Fallback to standard recommendations
+                recommendations = self.get_recommendations_fast(tag_ids, limit * 2)
             
             if not recommendations:
                 print("Standard recommendations failed, trying fallback approach...")
@@ -705,7 +829,7 @@ class QlooService:
                 {"id": "fallback_ultimate", "name": "The Weeknd", "type": "urn:entity:artist", "popularity": 0.9, "cultural_relevance": 0.0, "description": "Canadian singer and songwriter", "tags": []}
             ]
     
-    def get_music_recommendations_with_user_signals(self, tag_ids: List[str], user_artist_ids: List[str], user_track_ids: List[str], user_country: str = None, limit: int = 15) -> List[Dict]:
+    def get_music_recommendations_with_user_signals(self, tag_ids: List[str], user_artist_ids: List[str], user_track_ids: List[str], user_country: str = None, location: str = None, location_radius: int = 50000, limit: int = 15) -> List[Dict]:
         """Get music recommendations using user's listening history as signals"""
         if not tag_ids:
             print(f"No tag IDs provided for music recommendations")
@@ -737,13 +861,21 @@ class QlooService:
                 params["signals"] = ",".join(signals)
                 print(f"Using {len(signals)} user listening signals")
             
-            # Add location-based signals if user country is provided
-            if user_country:
-                location = self._get_location_from_country(user_country)
-                if location:
-                    params["signal.location.query"] = location
+            # Add location-based signals if location is provided
+            if location:
+                params["signal.location.query"] = location
+                params["signal.location.radius"] = location_radius
+                print(f"[QLOO LOCATION] Using location-based signals for: {location} (radius: {location_radius}m)")
+                print(f"[QLOO LOCATION] Location parameters added to API request")
+            elif user_country:
+                # Fallback: derive location from country
+                derived_location = self._get_location_from_country(user_country)
+                if derived_location:
+                    params["signal.location.query"] = derived_location
                     params["signal.location.radius"] = 50000  # 50km radius
-                    print(f"Using location-based signals for: {location}")
+                    print(f"[QLOO LOCATION] Using derived location from country {user_country}: {derived_location}")
+            else:
+                print(f"[QLOO LOCATION] No location provided - using global recommendations")
             
             print(f"Requesting music recommendations with tags: {tag_ids[:3]}...")
             response = requests.get(url, headers=self.headers, params=params, timeout=15)
@@ -785,8 +917,8 @@ class QlooService:
                 print(f"Processed {len(final_recommendations)} music recommendations")
                 return final_recommendations
             else:
-                print(f"Qloo API error for music recommendations: {response.status_code} - {response.text}")
-                print(f"Response content: {response.text[:500]}...")
+                print(f"Qloo API error for music recommendations: {response.status_code}")
+                print(f"Response content: [JSON response truncated]")
             
         except Exception as e:
             print(f"Music recommendations error: {e}")

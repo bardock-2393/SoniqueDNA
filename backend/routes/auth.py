@@ -148,4 +148,32 @@ def spotify_session_clear():
             'reauth_url': f"http://localhost:5500/auth/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+@auth_routes.route('/check-token-scopes', methods=['POST'])
+def check_token_scopes():
+    """Check what scopes the current token has"""
+    try:
+        data = request.get_json()
+        
+        if not validate_input_data(data, ["spotify_token"]):
+            return jsonify({"error": "Missing spotify_token parameter"}), 400
+        
+        spotify_token = sanitize_string(data["spotify_token"])
+        
+        # Check scopes
+        scopes = spotify_service.get_token_scopes(spotify_token)
+        
+        # Get user profile to see if country is available
+        profile = spotify_service.get_user_profile(spotify_token)
+        
+        return jsonify({
+            "scopes": scopes,
+            "has_user_read_private": "user-read-private" in scopes,
+            "profile": profile,
+            "country_available": profile.get("country") is not None if profile else False
+        })
+        
+    except Exception as e:
+        print(f"Token scope check error: {e}")
+        return jsonify({"error": "Failed to check token scopes"}), 500 
