@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
     host: "0.0.0.0", // Allow external access for EC2
     port: 8080,
     headers: {
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.deepsantoshwar.xyz http://15.207.204.90:5500;"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.spotify.com https://api.spotify.com https://*.spotify.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com https://*.spotify.com https://*.deepsantoshwar.xyz http://15.207.204.90:5500 https://api.qloo.com; media-src 'self' https: blob:;"
     }
   },
   plugins: [
@@ -19,4 +19,14 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ui: ['@radix-ui/react-dialog', '@radix-ui/react-tabs', '@radix-ui/react-toast'],
+        }
+      }
+    }
+  }
 }));

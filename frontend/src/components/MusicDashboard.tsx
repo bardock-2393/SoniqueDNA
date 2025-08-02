@@ -744,6 +744,7 @@ const MusicDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
       {/* Only show on home page */}
       {location.pathname === '/' && messages.length === 0 && spotifyToken && spotifyUserProfile && (
         <div className="fixed top-2 left-2 sm:top-4 sm:left-4 z-50 flex items-center gap-2 bg-white border-2 border-black px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-comic font-bold shadow comic-shadow text-sm sm:text-base">
@@ -2115,7 +2116,8 @@ const MusicDashboard: React.FC = () => {
       </div>
 
       {/* Multi-step loader */}
-      <MultiStepLoader loadingStates={loadingStates} loading={isLoading} duration={5000} loop={false} />
+      <MultiStepLoader loadingStates={loadingStates} loading={isLoading} duration={2800} loop={false} />
+      </div>
     </div>
   );
 };
