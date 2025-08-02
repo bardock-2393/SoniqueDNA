@@ -274,7 +274,7 @@ export default function CrossDomainRecommendations({
 
   const clearServerCache = async () => {
     try {
-      await fetch('http://localhost:5500/clear-cache', {
+      await fetch(apiUrl('/clear-cache'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -326,7 +326,7 @@ export default function CrossDomainRecommendations({
     setProgressInterval(interval);
 
     try {
-      const response = await fetch('http://localhost:5500/crossdomain-recommendations', {
+      const response = await fetch(apiUrl('/crossdomain-recommendations'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -4,6 +4,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Loader2, BarChart3, PieChart, TrendingUp, Music, Heart, Calendar } from 'lucide-react';
+import { apiUrl } from '@/config/env';
 
 interface GenreData {
   genre: string;
@@ -46,7 +47,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:5500/user-analytics/${userId}`);
+      const response = await fetch(apiUrl(`/user-analytics/${userId}`));
       if (!response.ok) {
         throw new Error('Failed to load taste analytics');
       }
@@ -306,7 +307,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
           <Button 
             onClick={async () => {
               try {
-                await fetch(`http://localhost:5500/analytics/clear/${userId}`, { method: 'POST' });
+                await fetch(apiUrl(`/analytics/clear/${userId}`), { method: 'POST' });
                 loadAnalytics();
               } catch (err) {
                 console.error('Failed to clear analytics:', err);
@@ -321,7 +322,7 @@ const UserTasteGraph: React.FC<UserTasteGraphProps> = ({ userId }) => {
           <Button 
             onClick={async () => {
               try {
-                await fetch(`http://localhost:5500/analytics/populate-sample/${userId}`, { method: 'POST' });
+                await fetch(apiUrl(`/analytics/populate-sample/${userId}`), { method: 'POST' });
                 loadAnalytics();
               } catch (err) {
                 console.error('Failed to populate sample analytics:', err);

@@ -19,7 +19,10 @@ from routes.recommendations import recommendation_routes
 from routes.playlists import playlist_routes
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:8080', 'http://127.0.0.1:8080', 'http://localhost:4173', 'http://127.0.0.1:4173'], supports_credentials=True)
+
+# Get CORS origins from environment or use defaults
+CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,https://soniquedna.deepsantoshwar.xyz').split(',')
+CORS(app, origins=CORS_ORIGINS, supports_credentials=True)
 
 # Initialize services
 spotify_service = SpotifyService()
@@ -36,6 +39,8 @@ CACHE_EXPIRY = 3600  # 1 hour in seconds
 app.register_blueprint(auth_routes, url_prefix='/auth')
 app.register_blueprint(recommendation_routes, url_prefix='/recommendations')
 app.register_blueprint(playlist_routes, url_prefix='/playlists')
+
+
 
 # Add direct routes for frontend compatibility (matching old backend structure)
 @app.route('/spotify-auth-url', methods=['GET', 'POST'])
@@ -78,7 +83,7 @@ def exchange_token_direct():
             return jsonify({"error": "Missing code parameter"}), 400
         
         code = data["code"]
-        redirect_uri = data.get("redirect_uri", "http://127.0.0.1:8080/callback")
+        redirect_uri = data.get("redirect_uri", os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback'))
         
         # Exchange code for token
         token_data = spotify_service.exchange_token(code, redirect_uri)
@@ -230,7 +235,7 @@ def logout_direct():
             "force_reauth": True,
             "unique_state": unique_state,
             "session_id": session_id,
-            "reauth_url": f"http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            "reauth_url": f"/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
         
     except Exception as e:
@@ -249,7 +254,7 @@ def spotify_session_clear_direct():
             'success': True,
             'message': 'Spotify session cleared',
             'session_id': session_id,
-            'reauth_url': f"http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            'reauth_url': f"/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2001,4 +2006,6 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5500) 
+    # For development/production with Nginx - run on HTTP port 5500
+    # Nginx will handle HTTPS and SSL certificates
+    app.run(host='0.0.0.0', port=5500, debug=False) 

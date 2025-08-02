@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { apiUrl, getSpotifyRedirectUri } from '@/config/env';
 
 interface Message {
   id: string;
@@ -109,7 +110,7 @@ const MusicDashboard: React.FC = () => {
       try {
         if (spotifyUserId) {
           console.log(`[FRONTEND] Polling progress for user: ${spotifyUserId}`);
-          const progressRes = await fetch(`http://localhost:5500/crossdomain-progress/${spotifyUserId}`);
+          const progressRes = await fetch(apiUrl(`/crossdomain-progress/${spotifyUserId}`));
           console.log(`[FRONTEND] Progress response status: ${progressRes.status}`);
           
           if (progressRes.ok) {
@@ -151,7 +152,7 @@ const MusicDashboard: React.FC = () => {
     
     try {
       // Clear cache for this user first
-      await fetch('http://localhost:5500/clear-cache', {
+      await fetch(apiUrl('/clear-cache'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: spotifyUserId })
@@ -163,7 +164,7 @@ const MusicDashboard: React.FC = () => {
       const userContext = "music discovery and cross-domain recommendations";
 
       // Fetch fresh recommendations
-      const res = await fetch('http://localhost:5500/crossdomain-recommendations', {
+      const res = await fetch(apiUrl('/crossdomain-recommendations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -309,7 +310,7 @@ const MusicDashboard: React.FC = () => {
     setIsLoading(true);
 
     try {
-              const res = await fetch('http://localhost:5500/musicrecommendation', {
+              const res = await fetch(apiUrl('/musicrecommendation'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -371,7 +372,7 @@ const MusicDashboard: React.FC = () => {
     try {
       // First check if token is valid and refresh if needed
       const refreshToken = localStorage.getItem('spotify_refresh_token');
-      const checkRes = await fetch('http://localhost:5500/check-token', {
+      const checkRes = await fetch(apiUrl('/check-token'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -403,7 +404,7 @@ const MusicDashboard: React.FC = () => {
       }
       
       // Now fetch profile with the valid token
-      const res = await fetch('http://localhost:5500/spotify-profile', {
+      const res = await fetch(apiUrl('/spotify-profile'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ spotify_token: currentToken })
@@ -453,8 +454,8 @@ const MusicDashboard: React.FC = () => {
 
   const handleSaveCreds = () => {
     // Pre-configure the credentials for development mode
-    const devClientId = '5b5e4ceb834347e6a6c3b998cfaf0088';
-    const devClientSecret = '9c9aadd2b18e49859df887e5e9cc6ede';
+    const devClientId = 'f4b7a6f6cde94656ad7f0e8f0bfa8330';
+    const devClientSecret = '60cff7a0e84b4e1e94fb97f64d408996';
     
     localStorage.setItem('spotify_client_id', devClientId);
     localStorage.setItem('spotify_client_secret', devClientSecret);
@@ -474,7 +475,7 @@ const MusicDashboard: React.FC = () => {
     const code = params.get('code');
     if (code) {
       // Exchange code for access token
-      fetch('http://localhost:5500/exchange-token', {
+      fetch(apiUrl('/exchange-token'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
@@ -596,7 +597,7 @@ const MusicDashboard: React.FC = () => {
           try {
             if (spotifyUserId) {
               console.log(`[FRONTEND] Initial load - Polling progress for user: ${spotifyUserId}`);
-              const progressRes = await fetch(`http://localhost:5500/crossdomain-progress/${spotifyUserId}`);
+              const progressRes = await fetch(apiUrl(`/crossdomain-progress/${spotifyUserId}`));
               console.log(`[FRONTEND] Initial load - Progress response status: ${progressRes.status}`);
               
               if (progressRes.ok) {
@@ -637,7 +638,7 @@ const MusicDashboard: React.FC = () => {
         }, 1000); // Poll every 1000ms instead of 500ms to reduce load
         
         // For initial load, we don't have existing data, so we'll let the backend fetch from Spotify
-        fetch('http://localhost:5500/crossdomain-recommendations', {
+        fetch(apiUrl('/crossdomain-recommendations'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -768,7 +769,7 @@ const MusicDashboard: React.FC = () => {
                   // Disconnect - Full logout with token revocation
                   try {
                     // Call backend to revoke the token
-                    const logoutResponse = await fetch('http://localhost:5500/logout', {
+                    const logoutResponse = await fetch(apiUrl('/logout'), {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -812,7 +813,7 @@ const MusicDashboard: React.FC = () => {
                   
                   // Clear any cached data
                   try {
-                    await fetch('http://localhost:5500/clear-cache', {
+                    await fetch(apiUrl('/clear-cache'), {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
@@ -831,7 +832,7 @@ const MusicDashboard: React.FC = () => {
                   
                   // Redirect to re-authentication flow after a short delay
                   setTimeout(() => {
-                    fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true')
+                    fetch(apiUrl(`/spotify-auth-url?redirect_uri=${encodeURIComponent(getSpotifyRedirectUri())}&force_reauth=true`))
                       .then(res => res.json())
                       .then(data => {
                         window.location.href = data.auth_url;
@@ -844,7 +845,7 @@ const MusicDashboard: React.FC = () => {
                   }, 1000);
                 } else {
                   // Connect with standard redirect URI but force dialog
-                  const res = await fetch('http://localhost:5500/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true');
+                  const res = await fetch(apiUrl(`/spotify-auth-url?redirect_uri=${encodeURIComponent(getSpotifyRedirectUri())}&force_reauth=true`));
                   const data = await res.json();
                   window.location.href = data.auth_url;
                 }

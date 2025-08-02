@@ -6,37 +6,38 @@ import os
 auth_routes = Blueprint('auth', __name__)
 spotify_service = SpotifyService()
 
-@auth_routes.route('/spotify-auth-url', methods=['GET', 'POST'])
-def spotify_auth_url():
-    """Generate Spotify OAuth URL with state parameter"""
-    try:
-        # Handle both GET (query params) and POST (JSON body)
-        if request.method == 'GET':
-            redirect_uri = request.args.get('redirect_uri')
-            force_reauth = request.args.get('force_reauth', 'false').lower() == 'true'
-            session_id = request.args.get('session_id')
-        else:
-            data = request.get_json()
-            redirect_uri = data.get("redirect_uri") if data else None
-            force_reauth = data.get("force_reauth", False) if data else False
-            session_id = data.get("session_id") if data else None
-        
-        if not redirect_uri:
-            return jsonify({"error": "Missing redirect_uri parameter"}), 400
-        
-        redirect_uri = sanitize_string(redirect_uri)
-        
-        # Generate auth URL with re-authentication support
-        auth_data = spotify_service.generate_auth_url(redirect_uri, force_reauth=force_reauth, session_id=session_id)
-        
-        return jsonify({
-            "auth_url": auth_data["auth_url"],
-            "state": auth_data["state"]
-        })
-        
-    except Exception as e:
-        print(f"Auth URL generation error: {e}")
-        return jsonify({"error": "Failed to generate auth URL"}), 500
+# Commented out - duplicate route already exists in app.py
+# @auth_routes.route('/spotify-auth-url', methods=['GET', 'POST'])
+# def spotify_auth_url():
+#     """Generate Spotify OAuth URL with state parameter"""
+#     try:
+#         # Handle both GET (query params) and POST (JSON body)
+#         if request.method == 'GET':
+#             redirect_uri = request.args.get('redirect_uri')
+#             force_reauth = request.args.get('force_reauth', 'false').lower() == 'true'
+#             session_id = request.args.get('session_id')
+#         else:
+#             data = request.get_json()
+#             redirect_uri = data.get("redirect_uri") if data else None
+#             force_reauth = data.get("force_reauth", False) if data else False
+#             session_id = data.get("session_id") if data else None
+#         
+#         if not redirect_uri:
+#             return jsonify({"error": "Missing redirect_uri parameter"}), 400
+#         
+#         redirect_uri = sanitize_string(redirect_uri)
+#         
+#         # Generate auth URL with re-authentication support
+#         auth_data = spotify_service.generate_auth_url(redirect_uri, force_reauth=force_reauth, session_id=session_id)
+#         
+#         return jsonify({
+#             "auth_url": auth_data["auth_url"],
+#             "state": auth_data["state"]
+#         })
+#         
+#     except Exception as e:
+#         print(f"Auth URL generation error: {e}")
+#         return jsonify({"error": "Failed to generate auth URL"}), 500
 
 @auth_routes.route('/exchange-token', methods=['POST'])
 def exchange_token():
@@ -48,7 +49,7 @@ def exchange_token():
             return jsonify({"error": "Missing code parameter"}), 400
         
         code = sanitize_string(data["code"])
-        redirect_uri = sanitize_string(data.get("redirect_uri", "http://127.0.0.1:8080/callback"))
+        redirect_uri = sanitize_string(data.get("redirect_uri", os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')))
         
         # Exchange code for token
         token_data = spotify_service.exchange_token(code, redirect_uri)
@@ -126,7 +127,7 @@ def logout():
             "force_reauth": True,
             "unique_state": unique_state,
             "session_id": session_id,
-            "reauth_url": f"http://localhost:5500/auth/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            "reauth_url": f"/auth/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
         
     except Exception as e:
@@ -145,7 +146,7 @@ def spotify_session_clear():
             'success': True,
             'message': 'Spotify session cleared',
             'session_id': session_id,
-            'reauth_url': f"http://localhost:5500/auth/spotify-auth-url?redirect_uri=http://127.0.0.1:8080/callback&force_reauth=true&session_id={session_id}"
+            'reauth_url': f"/auth/spotify-auth-url?redirect_uri={os.getenv('SPOTIFY_REDIRECT_URI', 'https://soniquedna.deepsantoshwar.xyz/callback')}&force_reauth=true&session_id={session_id}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

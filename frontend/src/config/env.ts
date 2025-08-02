@@ -2,13 +2,13 @@
 export const config = {
   // Spotify Configuration
   spotify: {
-    clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || '5b5e4ceb834347e6a6c3b998cfaf0088',
-    redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'http://localhost:5500/callback',
+    clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'f4b7a6f6cde94656ad7f0e8f0bfa8330',
+    redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'https://soniquedna.deepsantoshwar.xyz/callback',
   },
   
-  // Backend Configuration
+  // Backend Configuration - Development mode uses EC2 IP
   backend: {
-    url: import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080',
+    url: import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? 'http://15.207.204.90:5500' : 'https://soniquedna.deepsantoshwar.xyz'),
   },
   
   // App Configuration
@@ -21,4 +21,13 @@ export const config = {
 export const getSpotifyClientId = () => config.spotify.clientId;
 export const getSpotifyRedirectUri = () => config.spotify.redirectUri;
 export const getBackendUrl = () => config.backend.url;
-export const getAppEnv = () => config.app.env; 
+
+// API helper functions
+export const apiUrl = (endpoint: string) => {
+  const baseUrl = getBackendUrl();
+  return `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+};
+
+export const spotifyApiUrl = (endpoint: string) => {
+  return apiUrl(endpoint);
+}; 
