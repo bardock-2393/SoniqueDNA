@@ -9,8 +9,8 @@ class SpotifyService:
     """Optimized Spotify API service with minimal overhead"""
     
     def __init__(self):
-        self.client_id = os.getenv('SPOTIFY_CLIENT_ID', "f4b7a6f6cde94656ad7f0e8f0bfa8330")
-        self.client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', "60cff7a0e84b4e1e94fb97f64d408996")
+        self.client_id = os.getenv('SPOTIFY_CLIENT_ID', "5b5e4ceb834347e6a6c3b998cfaf0088")
+        self.client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', "9c9aadd2b18e49859df887e5e9cc6ede")
         self.base_url = "https://api.spotify.com/v1"
         self.auth_url = "https://accounts.spotify.com/api/token"
         # Simple in-memory cache for artist details to reduce API calls

@@ -104,7 +104,7 @@ const NewArtistsIndicator: React.FC<NewArtistsIndicatorProps> = ({
     setLoadingArtists(prev => new Set(prev).add(artistName));
 
     try {
-      const response = await fetch(apiUrl('/recommendations/artist-details'), {
+      const response = await fetch(apiUrl('/artist-details'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
