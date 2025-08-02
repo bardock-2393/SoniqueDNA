@@ -99,6 +99,16 @@ qloo_service.get_cross_domain_recommendations(
 
 ## 🛠️ Installation & Setup
 
+### 🚀 Quick Start for Development Testing
+
+**For immediate testing with our development setup, see:** [DEVELOPMENT_SETUP.md](./DEVELOPMENT_SETUP.md)
+
+This guide includes:
+- Test account credentials for Spotify development mode
+- Step-by-step setup instructions
+- Video tutorial link
+- Troubleshooting tips
+
 ### Prerequisites
 - Node.js 18+ and npm/yarn
 - Python 3.8+

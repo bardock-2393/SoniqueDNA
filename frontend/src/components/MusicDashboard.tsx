@@ -864,7 +864,7 @@ const MusicDashboard: React.FC = () => {
                 className="border-2 border-black px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-comic font-bold shadow comic-shadow text-sm sm:text-base bg-yellow-200 text-black hover:bg-yellow-300"
                 onClick={() => setShowCredsModal(true)}
               >
-                How to Connect Your Account
+                📋 Test Account Setup
               </button>
             )}
 
@@ -880,10 +880,10 @@ const MusicDashboard: React.FC = () => {
             >
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold text-black comic-shadow text-center">
-                  How to Connect Your Spotify Account
+                  🎵 Development Account Setup
                 </DialogTitle>
                 <p id="credentials-description" className="text-sm text-gray-600 text-center mt-2">
-                  We're running in development mode on Spotify, so there are some limitations. Here's how to connect:
+                  We're running in development mode. Use these test credentials to connect your Spotify account!
                 </p>
               </DialogHeader>
               <div className="flex flex-col gap-6 mt-6 max-h-[70vh] overflow-y-auto pr-2">
@@ -897,39 +897,53 @@ const MusicDashboard: React.FC = () => {
                     <h3 className="font-comic font-bold text-lg text-black">Development Mode</h3>
                   </div>
                   <p className="text-sm text-gray-700 font-comic">
-                    We're currently running in Spotify's development mode. This means you need to be added as a user to access the app.
+                    This app is running in Spotify's development mode. You need to use the provided test account to access the app.
                   </p>
                 </div>
 
-                {/* Step 2: Account Setup */}
+                {/* Step 2: Test Account Credentials */}
                 <div className="bg-blue-50 border-2 border-blue-400 rounded-lg p-4">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-8 h-8 bg-blue-400 rounded-full flex items-center justify-center text-white font-bold">
                       1
                     </div>
-                    <h3 className="font-comic font-bold text-lg text-black">Account Setup</h3>
+                    <h3 className="font-comic font-bold text-lg text-black">Test Account Credentials</h3>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
-                      <span className="font-bold text-black">Email:</span>
+                      <span className="font-bold text-black">📧 Email:</span>
                       <span className="font-mono text-sm bg-white border border-black rounded px-2 py-1 select-all">
                         deepsantoshwargfg@gmail.com
                       </span>
                       <button
-                        className="bg-blue-200 border-2 border-black rounded px-2 py-1 text-xs font-bold hover:bg-blue-300"
-                        onClick={() => navigator.clipboard.writeText('deepsantoshwargfg@gmail.com')}
+                        className="bg-blue-200 border-2 border-black rounded px-2 py-1 text-xs font-bold hover:bg-blue-300 transition-colors"
+                        onClick={() => {
+                          navigator.clipboard.writeText('deepsantoshwargfg@gmail.com');
+                          toast({
+                            title: "Email Copied!",
+                            description: "Email address copied to clipboard",
+                            duration: 2000,
+                          });
+                        }}
                       >
                         Copy
                       </button>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-bold text-black">Password:</span>
+                      <span className="font-bold text-black">🔑 Password:</span>
                       <span className="font-mono text-sm bg-white border border-black rounded px-2 py-1 select-all">
                         Deep@12345678
                       </span>
                       <button
-                        className="bg-blue-200 border-2 border-black rounded px-2 py-1 text-xs font-bold hover:bg-blue-300"
-                        onClick={() => navigator.clipboard.writeText('Deep@12345678')}
+                        className="bg-blue-200 border-2 border-black rounded px-2 py-1 text-xs font-bold hover:bg-blue-300 transition-colors"
+                        onClick={() => {
+                          navigator.clipboard.writeText('Deep@12345678');
+                          toast({
+                            title: "Password Copied!",
+                            description: "Password copied to clipboard",
+                            duration: 2000,
+                          });
+                        }}
                       >
                         Copy
                       </button>
@@ -937,9 +951,7 @@ const MusicDashboard: React.FC = () => {
                   </div>
                 </div>
 
-
-
-                {/* Step 2: Connection Instructions */}
+                {/* Step 3: Connection Instructions */}
                 <div className="bg-purple-50 border-2 border-purple-400 rounded-lg p-4">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-8 h-8 bg-purple-400 rounded-full flex items-center justify-center text-white font-bold">
@@ -948,34 +960,38 @@ const MusicDashboard: React.FC = () => {
                     <h3 className="font-comic font-bold text-lg text-black">Connect Your Account</h3>
                   </div>
                   <div className="space-y-2 text-sm text-gray-700 font-comic">
-                    <p>1. Use the provided email and password to log in</p>
+                    <p>1. Use the test email and password above to log in</p>
                     <p>2. Click the "Connect to Spotify" button above</p>
                     <p>3. Authorize the app when prompted</p>
                     <p>4. Start creating your perfect playlists! 🎵</p>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-purple-300">
-                    <p className="text-xs text-gray-600 font-comic">
-                      📚 Need more info? Check out the{' '}
-                      <a 
-                        href="https://developer.spotify.com/" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="bg-yellow-300 text-black px-2 py-1 rounded border-2 border-black font-bold hover:bg-yellow-400 transition-colors"
-                      >
-                        Spotify Developer Documentation
-                      </a>
+                </div>
+
+                {/* Step 4: Video Tutorial */}
+                <div className="bg-green-50 border-2 border-green-400 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 bg-green-400 rounded-full flex items-center justify-center text-white font-bold">
+                      3
+                    </div>
+                    <h3 className="font-comic font-bold text-lg text-black">Watch Tutorial Video</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700 font-comic">
+                      Need help? Watch our step-by-step tutorial video:
                     </p>
-                    <p className="text-xs text-gray-600 font-comic mt-2">
-                      📹 Watch our{' '}
+                    <div className="flex justify-center">
                       <a 
                         href="https://youtu.be/0leb4gCI39c" 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="bg-blue-300 text-black px-2 py-1 rounded border-2 border-black font-bold hover:bg-blue-400 transition-colors"
+                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg border-2 border-black font-bold hover:scale-105 transition-all duration-200 flex items-center gap-2"
                       >
-                        Demo Video
-                      </a>{' '}
-                      to see how to connect step-by-step!
+                        <span className="text-xl">▶️</span>
+                        <span>Watch Demo Video</span>
+                      </a>
+                    </div>
+                    <p className="text-xs text-gray-600 font-comic text-center">
+                      Easy language tutorial showing exactly how to connect your account
                     </p>
                   </div>
                 </div>
