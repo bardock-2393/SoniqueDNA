@@ -454,8 +454,8 @@ const MusicDashboard: React.FC = () => {
 
   const handleSaveCreds = () => {
     // Pre-configure the credentials for development mode
-    const devClientId = '5b5e4ceb834347e6a6c3b998cfaf0088';
-    const devClientSecret = '9c9aadd2b18e49859df887e5e9cc6ede';
+    const devClientId = 'f4b7a6f6cde94656ad7f0e8f0bfa8330';
+    const devClientSecret = '60cff7a0e84b4e1e94fb97f64d408996';
     
     localStorage.setItem('spotify_client_id', devClientId);
     localStorage.setItem('spotify_client_secret', devClientSecret);

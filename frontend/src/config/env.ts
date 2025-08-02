@@ -2,7 +2,7 @@
 export const config = {
   // Spotify Configuration
   spotify: {
-    clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || '5b5e4ceb834347e6a6c3b998cfaf0088',
+    clientId: import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'f4b7a6f6cde94656ad7f0e8f0bfa8330',
     redirectUri: import.meta.env.VITE_SPOTIFY_REDIRECT_URI || 'https://soniquedna.deepsantoshwar.xyz/callback',
   },
   
