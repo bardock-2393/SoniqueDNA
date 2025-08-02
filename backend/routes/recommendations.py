@@ -9,6 +9,8 @@ from utils.helpers import (
 )
 import time
 import hashlib
+import json
+from typing import Dict, List
 
 recommendation_routes = Blueprint('recommendations', __name__)
 spotify_service = SpotifyService()
@@ -67,38 +69,22 @@ def music_recommendation():
         print(f"[SIGNALS] User artist IDs: {user_artist_ids[:3]}...")
         print(f"[SIGNALS] User track IDs: {user_track_ids[:3]}...")
         
-        # Step 6: Generate cultural context tags and send directly to Qloo until 5 accepted
-        user_artists = [artist.get("name", "") for artist in user_data.get("artists", [])[:5]]
-        
+        # Step 6: Generate AI-driven context-aware tags
+        context_tags = gemini_service.generate_context_aware_tags(user_context, user_country, user_artists)
+        print(f"[AI TAGS] Context-aware tags: {context_tags}")
+
         # Generate cultural context
         cultural_context = gemini_service.generate_cultural_context(user_country)
         print(f"[CULTURAL CONTEXT] Generated: {cultural_context}")
-        
-        # Create tags from cultural context, sorted by user context relevance
+
+        # Create tags from cultural context
         cultural_tags = cultural_context.get("cultural_elements", []) + cultural_context.get("popular_genres", [])
-        
-        # Add context-specific tags based on user input
-        context_tags = []
-        context_lower = user_context.lower()
-        
-        if any(word in context_lower for word in ['party', 'dance', 'upbeat', 'energetic']):
-            context_tags = ['upbeat', 'dance', 'energetic', 'party', 'electronic']
-        elif any(word in context_lower for word in ['sad', 'melancholy', 'emotional']):
-            context_tags = ['emotional', 'melancholy', 'sad', 'romantic', 'drama']
-        elif any(word in context_lower for word in ['romantic', 'love', 'passionate']):
-            context_tags = ['romantic', 'love', 'passionate', 'emotional', 'drama']
-        elif any(word in context_lower for word in ['workout', 'gym', 'running']):
-            context_tags = ['energetic', 'upbeat', 'electronic', 'dance', 'pop']
-        elif any(word in context_lower for word in ['study', 'work', 'focus']):
-            context_tags = ['calm', 'relax', 'ambient', 'instrumental', 'chill']
-        else:
-            context_tags = ['contemporary', 'mainstream', 'popular', 'cultural', 'diverse']
-        
-        # Combine and prioritize: context tags first, then cultural tags
+
+        # Combine AI-generated context tags with cultural tags
         all_tags = context_tags + cultural_tags
         all_tags = list(dict.fromkeys(all_tags))  # Remove duplicates
-        
-        print(f"[TAGS] Context-specific tags: {context_tags}")
+
+        print(f"[TAGS] AI context tags: {context_tags}")
         print(f"[TAGS] Cultural tags: {cultural_tags}")
         print(f"[TAGS] Combined tags: {all_tags}")
         

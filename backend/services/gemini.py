@@ -1255,3 +1255,125 @@ class GeminiService:
             num_replacements = random.randint(2, 3)
             replacement_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], num_replacements)
             return base_tags[:8-num_replacements] + replacement_tags
+
+    def analyze_compound_context(self, user_context: str) -> Dict:
+        """AI-driven analysis of compound contexts like 'anime songs for study'"""
+        prompt = f"""
+        Analyze this user context and extract ALL relevant elements. Return ONLY a JSON object with these exact fields:
+        
+        - primary_elements: array of strings (e.g., ["anime", "japanese", "soundtrack"])
+        - activity_context: array of strings (e.g., ["study", "focus", "background"])
+        - mood_preference: array of strings (e.g., ["calm", "instrumental", "non-distracting"])
+        - genre_hints: array of strings (e.g., ["j-pop", "anime_opening", "soundtrack"])
+        - energy_level: string (high, medium, low)
+        - confidence: float (0.0 to 1.0)
+        
+        Examples:
+        - "anime songs for study" → {{"primary_elements": ["anime", "japanese"], "activity_context": ["study", "focus"], "mood_preference": ["calm", "instrumental"], "genre_hints": ["j-pop", "anime_opening", "soundtrack"], "energy_level": "low", "confidence": 0.9}}
+        - "bollywood party music" → {{"primary_elements": ["bollywood", "indian"], "activity_context": ["party", "dance"], "mood_preference": ["energetic", "upbeat"], "genre_hints": ["bollywood", "hindi_pop", "bhangra"], "energy_level": "high", "confidence": 0.9}}
+        - "sad romantic songs" → {{"primary_elements": ["romantic", "emotional"], "activity_context": ["introspective"], "mood_preference": ["sad", "melancholy"], "genre_hints": ["romantic", "ballad"], "energy_level": "low", "confidence": 0.8}}
+        
+        User context: {user_context}
+        
+        Return only the JSON object, no other text.
+        """
+        
+        try:
+            response = self._call_gemini(prompt)
+            if response:
+                try:
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start != -1 and json_end != 0:
+                        json_str = response[json_start:json_end]
+                        result = json.loads(json_str)
+                        return result
+                except json.JSONDecodeError:
+                    pass
+                
+                return self._parse_compound_context_fallback(response)
+            
+        except Exception as e:
+            print(f"Compound context analysis error: {e}")
+        
+        # Default fallback
+        return {
+            "primary_elements": ["general"],
+            "activity_context": ["general"],
+            "mood_preference": ["neutral"],
+            "genre_hints": ["mainstream"],
+            "energy_level": "medium",
+            "confidence": 0.5
+        }
+
+    def generate_context_aware_tags(self, user_context: str, user_country: str = None, user_artists: List[str] = None) -> List[str]:
+        """Generate context-aware tags using AI analysis instead of hardcoded rules"""
+        
+        # Analyze the compound context
+        context_analysis = self.analyze_compound_context(user_context)
+        print(f"[AI CONTEXT] Analysis: {context_analysis}")
+        
+        # Extract all relevant elements
+        all_elements = []
+        all_elements.extend(context_analysis.get("primary_elements", []))
+        all_elements.extend(context_analysis.get("activity_context", []))
+        all_elements.extend(context_analysis.get("mood_preference", []))
+        all_elements.extend(context_analysis.get("genre_hints", []))
+        
+        # Remove duplicates and filter out empty strings
+        all_elements = list(dict.fromkeys([elem for elem in all_elements if elem]))
+        
+        # Add cultural context if available
+        if user_country:
+            cultural_context = self.generate_cultural_context(user_country)
+            cultural_elements = cultural_context.get("cultural_elements", [])
+            all_elements.extend(cultural_elements[:3])  # Limit cultural elements
+        
+        # Remove duplicates again
+        all_elements = list(dict.fromkeys(all_elements))
+        
+        print(f"[AI TAGS] Generated {len(all_elements)} context-aware tags: {all_elements}")
+        return all_elements
+
+    def _parse_compound_context_fallback(self, response: str) -> Dict:
+        """Fallback parsing for compound context analysis"""
+        response_lower = response.lower()
+        
+        # Simple keyword extraction as fallback
+        primary_elements = []
+        activity_context = []
+        mood_preference = []
+        genre_hints = []
+        
+        # Extract primary elements
+        if any(word in response_lower for word in ['anime', 'japanese']):
+            primary_elements.extend(['anime', 'japanese'])
+        if any(word in response_lower for word in ['bollywood', 'indian']):
+            primary_elements.extend(['bollywood', 'indian'])
+        if any(word in response_lower for word in ['romantic', 'love']):
+            primary_elements.extend(['romantic', 'love'])
+        
+        # Extract activity context
+        if any(word in response_lower for word in ['study', 'work', 'focus']):
+            activity_context.extend(['study', 'focus'])
+        if any(word in response_lower for word in ['party', 'dance']):
+            activity_context.extend(['party', 'dance'])
+        if any(word in response_lower for word in ['workout', 'gym']):
+            activity_context.extend(['workout', 'energetic'])
+        
+        # Extract mood preference
+        if any(word in response_lower for word in ['calm', 'relax']):
+            mood_preference.extend(['calm', 'relax'])
+        if any(word in response_lower for word in ['energetic', 'upbeat']):
+            mood_preference.extend(['energetic', 'upbeat'])
+        if any(word in response_lower for word in ['sad', 'melancholy']):
+            mood_preference.extend(['sad', 'melancholy'])
+        
+        return {
+            "primary_elements": primary_elements or ["general"],
+            "activity_context": activity_context or ["general"],
+            "mood_preference": mood_preference or ["neutral"],
+            "genre_hints": genre_hints or ["mainstream"],
+            "energy_level": "medium",
+            "confidence": 0.6
+        }
