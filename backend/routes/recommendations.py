@@ -734,7 +734,7 @@ def clear_analytics(user_id):
         print(f"Analytics clearing error: {e}")
         return jsonify({"error": "Failed to clear analytics"}), 500
 
-@recommendation_routes.route('recommendations/artist-details', methods=['POST'])
+@recommendation_routes.route('/recommendations/artist-details', methods=['POST'])
 def get_artist_details():
     """Get detailed artist information from Spotify"""
     try:
