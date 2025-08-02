@@ -247,6 +247,7 @@ def music_recommendation():
             "recommendations": recommendations[:limit],
             "new_artists": new_artists,
             "qloo_power_showcase": qloo_power_showcase,
+            "from_cache": False,  # Always false since we removed caching
             "analysis": {
                 "context_analysis": context_analysis,
                 "tags_used": all_tags,
