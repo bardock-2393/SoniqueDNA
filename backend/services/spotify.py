@@ -13,6 +13,9 @@ class SpotifyService:
         self.client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', "60cff7a0e84b4e1e94fb97f64d408996")
         self.base_url = "https://api.spotify.com/v1"
         self.auth_url = "https://accounts.spotify.com/api/token"
+        # Simple in-memory cache for artist details to reduce API calls
+        self.artist_cache = {}
+        self.artist_search_cache = {}
     
     def generate_auth_url(self, redirect_uri: str, force_reauth: bool = False, session_id: str = None) -> Dict[str, str]:
         """Generate Spotify OAuth URL with state parameter"""
@@ -98,26 +101,59 @@ class SpotifyService:
             return True
     
     def get_user_profile(self, access_token: str) -> Optional[Dict]:
-        """Get user profile - single API call"""
+        """Get user profile with retry mechanism for 502 errors"""
         headers = {"Authorization": f"Bearer {access_token}"}
+        max_retries = 3
+        retry_delay = 1  # seconds
         
-        try:
-            response = requests.get(f"{self.base_url}/me", headers=headers, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            
-            return {
-                "user_id": data.get("id"),
-                "name": data.get("display_name"),
-                "avatar": data.get("images", [{}])[0].get("url") if data.get("images") else None,
-                "country": data.get("country")
-            }
-        except Exception as e:
-            print(f"Profile fetch error: {e}")
-            return None
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(f"{self.base_url}/me", headers=headers, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                
+                print(f"[SPOTIFY] Successfully fetched user profile on attempt {attempt + 1}")
+                print(f"[SPOTIFY] User profile data: {data}")
+                print(f"[SPOTIFY] Country from API: {data.get('country')}")
+                
+                return {
+                    "user_id": data.get("id"),
+                    "name": data.get("display_name"),
+                    "avatar": data.get("images", [{}])[0].get("url") if data.get("images") else None,
+                    "country": data.get("country")
+                }
+            except requests.exceptions.HTTPError as e:
+                print(f"[SPOTIFY] Profile fetch attempt {attempt + 1} failed with status {e.response.status_code}")
+                print(f"[SPOTIFY] Response content: {e.response.text}")
+                
+                if e.response.status_code == 502:
+                    if attempt < max_retries - 1:
+                        print(f"[SPOTIFY] Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        print(f"[SPOTIFY] All {max_retries} attempts failed with 502 - using fallback profile")
+                        return {
+                            "user_id": "fallback_user",
+                            "name": "Spotify User",
+                            "avatar": None,
+                            "country": "US"  # Default fallback country
+                        }
+                elif e.response.status_code == 403:
+                    print(f"[SPOTIFY] 403 Forbidden - likely missing user-read-private scope")
+                    return None
+                else:
+                    print(f"[SPOTIFY] Profile fetch error: {e}")
+                    return None
+            except Exception as e:
+                print(f"[SPOTIFY] Profile fetch error: {e}")
+                return None
+        
+        return None
     
     def get_top_artists_with_images(self, access_token: str, limit: int = 10, time_range: str = "medium_term") -> List[Dict]:
-        """Get user's top artists with images from Spotify"""
+        """Get user's top artists with images from Spotify with retry mechanism"""
         url = f"{self.base_url}/me/top/artists"
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {
@@ -125,29 +161,50 @@ class SpotifyService:
             "time_range": time_range
         }
         
-        try:
-            response = requests.get(url, headers=headers, params=params, timeout=5)
-            response.raise_for_status()
-            
-            artists = []
-            for item in response.json().get("items", []):
-                artist_info = {
-                    "name": item.get("name"),
-                    "id": item.get("id"),
-                    "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
-                    "genres": item.get("genres", []),
-                    "popularity": item.get("popularity", 0),
-                    "followers": item.get("followers", {}).get("total", 0) if item.get("followers") else 0
-                }
-                artists.append(artist_info)
-            
-            return artists
-        except Exception as e:
-            print(f"Error getting top artists with images: {e}")
-            return []
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                
+                artists = []
+                for item in response.json().get("items", []):
+                    artist_info = {
+                        "name": item.get("name"),
+                        "id": item.get("id"),
+                        "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
+                        "genres": item.get("genres", []),
+                        "popularity": item.get("popularity", 0),
+                        "followers": item.get("followers", {}).get("total", 0) if item.get("followers") else 0
+                    }
+                    artists.append(artist_info)
+                
+                print(f"[SPOTIFY] Successfully fetched {len(artists)} top artists on attempt {attempt + 1}")
+                return artists
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 502:
+                    print(f"[SPOTIFY] Top artists fetch attempt {attempt + 1} failed with 502 Bad Gateway")
+                    if attempt < max_retries - 1:
+                        print(f"[SPOTIFY] Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        print(f"[SPOTIFY] All {max_retries} attempts failed with 502 - returning empty list")
+                        return []
+                else:
+                    print(f"[SPOTIFY] Top artists fetch error: {e}")
+                    return []
+            except Exception as e:
+                print(f"[SPOTIFY] Top artists fetch error: {e}")
+                return []
+        
+        return []
 
     def get_top_artists_with_genres(self, access_token: str, limit: int = 20, time_range: str = "long_term") -> List[Dict]:
-        """Get user's top artists with genres from Spotify"""
+        """Get user's top artists with genres from Spotify with retry mechanism"""
         url = f"{self.base_url}/me/top/artists"
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {
@@ -155,27 +212,46 @@ class SpotifyService:
             "time_range": time_range
         }
         
-        try:
-            response = requests.get(url, headers=headers, params=params, timeout=10)
-            response.raise_for_status()
-            
-            artists = []
-            for item in response.json().get("items", []):
-                artist_info = {
-                    "name": item.get("name"),
-                    "id": item.get("id"),
-                    "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
-                    "genres": item.get("genres", []),
-                    "popularity": item.get("popularity", 0)
-                }
-                artists.append(artist_info)
-            
-            print(f"[SPOTIFY] Got {len(artists)} top artists with genres")
-            return artists
-            
-        except Exception as e:
-            print(f"[SPOTIFY] Error getting top artists with genres: {e}")
-            return []
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+                response.raise_for_status()
+                
+                artists = []
+                for item in response.json().get("items", []):
+                    artist_info = {
+                        "name": item.get("name"),
+                        "id": item.get("id"),
+                        "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
+                        "genres": item.get("genres", []),
+                        "popularity": item.get("popularity", 0)
+                    }
+                    artists.append(artist_info)
+                
+                print(f"[SPOTIFY] Successfully fetched {len(artists)} top artists with genres on attempt {attempt + 1}")
+                return artists
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 502:
+                    print(f"[SPOTIFY] Top artists with genres fetch attempt {attempt + 1} failed with 502 Bad Gateway")
+                    if attempt < max_retries - 1:
+                        print(f"[SPOTIFY] Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        print(f"[SPOTIFY] All {max_retries} attempts failed with 502 - returning empty list")
+                        return []
+                else:
+                    print(f"[SPOTIFY] Top artists with genres fetch error: {e}")
+                    return []
+            except Exception as e:
+                print(f"[SPOTIFY] Top artists with genres fetch error: {e}")
+                return []
+        
+        return []
     
     def get_top_tracks_detailed(self, access_token: str, limit: int = 20, time_range: str = "long_term") -> List[Dict]:
         """Get user's top tracks with detailed info from Spotify"""
@@ -211,43 +287,30 @@ class SpotifyService:
             return []
 
     def get_user_data_fast(self, access_token: str) -> Dict:
-        """Get all user data in parallel - optimized for speed"""
-        headers = {"Authorization": f"Bearer {access_token}"}
+        """Get all user data using retry-enabled methods"""
         
-        # Get user profile first
+        # Get user profile first (with retry mechanism)
         profile = self.get_user_profile(access_token)
         if not profile:
+            print("[SPOTIFY] Profile fetch error: Failed to get user profile")
             return {}
         
-        # Get top artists and tracks in parallel
-        artists_url = f"{self.base_url}/me/top/artists?limit=10&time_range=medium_term"
-        tracks_url = f"{self.base_url}/me/top/tracks?limit=10&time_range=medium_term"
+        # Get top artists using retry-enabled method
+        artists_with_images = self.get_top_artists_with_images(access_token, limit=10, time_range="medium_term")
+        artists = [{"name": item["name"], "id": item["id"], "genres": item.get("genres", [])} 
+                  for item in artists_with_images]
         
-        try:
-            # Make parallel requests
-            artist_response = requests.get(artists_url, headers=headers, timeout=5)
-            track_response = requests.get(tracks_url, headers=headers, timeout=5)
-            
-            artists = []
-            if artist_response.status_code == 200:
-                artist_data = artist_response.json()
-                artists = [{"name": item["name"], "id": item["id"], "genres": item.get("genres", [])} 
-                          for item in artist_data.get("items", [])]
-            
-            tracks = []
-            if track_response.status_code == 200:
-                track_data = track_response.json()
-                tracks = [{"name": item["name"], "id": item["id"], "artist": item["artists"][0]["name"]} 
-                         for item in track_data.get("items", [])]
-            
-            return {
-                "profile": profile,
-                "artists": artists,
-                "tracks": tracks
-            }
-        except Exception as e:
-            print(f"User data fetch error: {e}")
-            return {"profile": profile, "artists": [], "tracks": []}
+        # Get top tracks using retry-enabled method
+        tracks_detailed = self.get_top_tracks_detailed(access_token, limit=10, time_range="medium_term")
+        tracks = [{"name": item["name"], "id": item["id"], "artist": item["artist"]} 
+                 for item in tracks_detailed]
+        
+        print(f"[SPOTIFY] Successfully fetched user data: {len(artists)} artists, {len(tracks)} tracks")
+        return {
+            "profile": profile,
+            "artists": artists,
+            "tracks": tracks
+        }
     
     def create_playlist(self, access_token: str, user_id: str, name: str, description: str = "") -> Optional[Dict]:
         """Create Spotify playlist - single API call"""
@@ -303,99 +366,159 @@ class SpotifyService:
             return False
     
     def search_artist(self, access_token: str, artist_name: str) -> Optional[Dict]:
-        """Search for artist - single API call"""
+        """Search for artist with retry mechanism and caching"""
+        # Check cache first
+        cache_key = f"{artist_name.lower().strip()}"
+        if cache_key in self.artist_search_cache:
+            print(f"Artist search cache hit for: {artist_name}")
+            return self.artist_search_cache[cache_key]
+        
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {"q": artist_name, "type": "artist", "limit": 1}
         
-        try:
-            response = requests.get(f"{self.base_url}/search", headers=headers, params=params, timeout=10)
-            
-            # Check for specific error codes
-            if response.status_code == 401:
-                print(f"Artist search unauthorized (401) - token may be expired")
+        max_retries = 3
+        retry_delay = 1  # Start with 1 second for search
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(f"{self.base_url}/search", headers=headers, params=params, timeout=10)
+                
+                # Check for specific error codes
+                if response.status_code == 401:
+                    print(f"Artist search unauthorized (401) - token may be expired")
+                    return None
+                elif response.status_code == 403:
+                    print(f"Artist search forbidden (403) - token may not have required scopes")
+                    return None
+                elif response.status_code == 429:
+                    print(f"Artist search rate limited (429) - attempt {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        print(f"Waiting {retry_delay} seconds before retry...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        print(f"All {max_retries} attempts failed with 429 - returning None")
+                        return None
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                artists = data.get("artists", {}).get("items", [])
+                if artists:
+                    artist = artists[0]
+                    result = {
+                        "id": artist["id"],
+                        "name": artist["name"],
+                        "genres": artist.get("genres", [])
+                    }
+                    # Cache the result
+                    self.artist_search_cache[cache_key] = result
+                    print(f"Found artist: {artist['name']} (ID: {artist['id']}) on attempt {attempt + 1}")
+                    return result
+                else:
+                    print(f"No artist found for: {artist_name}")
+                    # Cache the None result to avoid repeated failed searches
+                    self.artist_search_cache[cache_key] = None
                 return None
-            elif response.status_code == 403:
-                print(f"Artist search forbidden (403) - token may not have required scopes")
+            except requests.exceptions.RequestException as e:
+                print(f"Network error in artist search (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
                 return None
-            elif response.status_code == 429:
-                print(f"Artist search rate limited (429) - too many requests")
+            except Exception as e:
+                print(f"Artist search error (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
                 return None
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            artists = data.get("artists", {}).get("items", [])
-            if artists:
-                artist = artists[0]
-                print(f"Found artist: {artist['name']} (ID: {artist['id']})")
-                return {
-                    "id": artist["id"],
-                    "name": artist["name"],
-                    "genres": artist.get("genres", [])
-                }
-            else:
-                print(f"No artist found for: {artist_name}")
-            return None
-        except requests.exceptions.RequestException as e:
-            print(f"Network error in artist search: {e}")
-            return None
-        except Exception as e:
-            print(f"Artist search error: {e}")
-            return None
+        
+        return None
     
     def get_artist_details(self, access_token: str, artist_id: str) -> Optional[Dict]:
-        """Get detailed artist information including image and Spotify URL"""
+        """Get detailed artist information including image and Spotify URL with retry mechanism and caching"""
+        # Check cache first
+        if artist_id in self.artist_cache:
+            print(f"Artist details cache hit for ID: {artist_id}")
+            return self.artist_cache[artist_id]
+        
         headers = {"Authorization": f"Bearer {access_token}"}
         
-        try:
-            response = requests.get(f"{self.base_url}/artists/{artist_id}", headers=headers, timeout=10)
-            
-            # Check for specific error codes
-            if response.status_code == 401:
-                print(f"Artist details unauthorized (401) - token may be expired")
+        max_retries = 3
+        retry_delay = 2  # Start with 2 seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(f"{self.base_url}/artists/{artist_id}", headers=headers, timeout=10)
+                
+                # Check for specific error codes
+                if response.status_code == 401:
+                    print(f"Artist details unauthorized (401) - token may be expired")
+                    return None
+                elif response.status_code == 403:
+                    print(f"Artist details forbidden (403) - token may not have required scopes")
+                    return None
+                elif response.status_code == 429:
+                    print(f"Artist details rate limited (429) - attempt {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        print(f"Waiting {retry_delay} seconds before retry...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        continue
+                    else:
+                        print(f"All {max_retries} attempts failed with 429 - returning None")
+                        return None
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                # Get the best quality image (usually the first one is the highest quality)
+                image_url = None
+                if data.get("images"):
+                    # Try to get the medium size image (around 300x300)
+                    for image in data["images"]:
+                        if image.get("width", 0) >= 200 and image.get("width", 0) <= 400:
+                            image_url = image.get("url")
+                            break
+                    # If no medium image found, use the first one
+                    if not image_url and data["images"]:
+                        image_url = data["images"][0].get("url")
+                
+                artist_details = {
+                    "id": data.get("id"),
+                    "name": data.get("name"),
+                    "image": image_url,
+                    "genres": data.get("genres", []),
+                    "popularity": data.get("popularity", 0),
+                    "followers": data.get("followers", {}).get("total", 0) if data.get("followers") else 0,
+                    "spotify_url": data.get("external_urls", {}).get("spotify", ""),
+                    "uri": data.get("uri", "")
+                }
+                
+                # Cache the result
+                self.artist_cache[artist_id] = artist_details
+                print(f"Artist details fetched for {data.get('name')} on attempt {attempt + 1}: image={image_url is not None}")
+                return artist_details
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Network error in artist details fetch (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
                 return None
-            elif response.status_code == 403:
-                print(f"Artist details forbidden (403) - token may not have required scopes")
+            except Exception as e:
+                print(f"Artist details fetch error (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
                 return None
-            elif response.status_code == 429:
-                print(f"Artist details rate limited (429) - too many requests")
-                return None
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            # Get the best quality image (usually the first one is the highest quality)
-            image_url = None
-            if data.get("images"):
-                # Try to get the medium size image (around 300x300)
-                for image in data["images"]:
-                    if image.get("width", 0) >= 200 and image.get("width", 0) <= 400:
-                        image_url = image.get("url")
-                        break
-                # If no medium image found, use the first one
-                if not image_url and data["images"]:
-                    image_url = data["images"][0].get("url")
-            
-            artist_details = {
-                "id": data.get("id"),
-                "name": data.get("name"),
-                "image": image_url,
-                "genres": data.get("genres", []),
-                "popularity": data.get("popularity", 0),
-                "followers": data.get("followers", {}).get("total", 0) if data.get("followers") else 0,
-                "spotify_url": data.get("external_urls", {}).get("spotify", ""),
-                "uri": data.get("uri", "")
-            }
-            
-            print(f"Artist details fetched for {data.get('name')}: image={image_url is not None}, spotify_url={artist_details['spotify_url']}")
-            return artist_details
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Network error in artist details fetch: {e}")
-            return None
-        except Exception as e:
-            print(f"Artist details fetch error: {e}")
-            return None
+        
+        return None
     
     def get_playlist_by_id(self, access_token: str, playlist_id: str) -> Optional[Dict]:
         """Get playlist details - single API call"""
@@ -610,83 +733,108 @@ class SpotifyService:
             print(f"Error analyzing emotional context: {e}")
             return "neutral"
     
-    def analyze_track_emotional_context_fallback(self, track_name: str, artist_name: str) -> str:
-        """Enhanced fallback emotional context analysis when audio features are not available"""
+    def analyze_track_music_context(self, track_name: str, artist_name: str, context_type: str) -> str:
+        """Music-specific context analysis based on track name, artist, and user context"""
         try:
             track_lower = track_name.lower()
             artist_lower = artist_name.lower()
+            context_lower = context_type.lower()
             
-            # Enhanced keywords for different emotional contexts
-            happy_keywords = ['happy', 'joy', 'smile', 'sunshine', 'bright', 'cheerful', 'upbeat', 'positive', 'good', 'great', 'amazing', 'wonderful', 'fantastic', 'awesome']
-            sad_keywords = ['sad', 'cry', 'tears', 'lonely', 'heartbreak', 'pain', 'sorrow', 'melancholy', 'blue', 'hurt', 'broken', 'missing', 'gone', 'lost', 'alone']
-            romantic_keywords = ['love', 'romance', 'heart', 'kiss', 'forever', 'together', 'soulmate', 'passion', 'beautiful', 'darling', 'sweet', 'honey', 'baby', 'dear']
-            energetic_keywords = ['energy', 'power', 'strong', 'fire', 'wild', 'crazy', 'intense', 'explosive', 'dance', 'party', 'rock', 'beat', 'rhythm', 'bass']
-            calm_keywords = ['calm', 'peace', 'quiet', 'gentle', 'soft', 'smooth', 'relax', 'serene', 'easy', 'slow', 'gentle', 'tender', 'mellow']
-            nostalgic_keywords = ['remember', 'memory', 'yesterday', 'old', 'past', 'childhood', 'nostalgic', 'throwback', 'vintage', 'classic']
+            # Context-specific analysis
+            if 'party' in context_lower or 'dance' in context_lower:
+                return "energetic_fast"
+            elif 'workout' in context_lower or 'gym' in context_lower:
+                return "energetic_fast"
+            elif 'study' in context_lower or 'focus' in context_lower:
+                return "happy_calm"
+            elif 'romantic' in context_lower or 'date' in context_lower:
+                return "romantic"
+            elif 'sad' in context_lower or 'melancholic' in context_lower:
+                return "sad_melancholic"
+            elif 'upbeat' in context_lower or 'happy' in context_lower:
+                return "happy_energetic"
             
-            # Hindi/Urdu emotional keywords
-            hindi_happy = ['khushi', 'masti', 'rang', 'nacho', 'gao', 'maza', 'fun']
-            hindi_sad = ['dukh', 'dard', 'aansu', 'tanha', 'udaas', 'gham', 'yaad']
-            hindi_romantic = ['pyaar', 'mohabbat', 'dil', 'jaan', 'sajan', 'prem', 'ishq']
+            # Track name analysis for music context
+            music_keywords = {
+                'energetic_fast': ['dance', 'party', 'rock', 'beat', 'rhythm', 'bass', 'drop', 'banger', 'fire', 'lit'],
+                'happy_energetic': ['happy', 'joy', 'smile', 'sunshine', 'bright', 'cheerful', 'upbeat', 'positive'],
+                'romantic': ['love', 'romance', 'heart', 'kiss', 'forever', 'together', 'soulmate', 'passion'],
+                'sad_melancholic': ['sad', 'cry', 'tears', 'lonely', 'heartbreak', 'pain', 'sorrow', 'melancholy'],
+                'happy_calm': ['calm', 'peace', 'quiet', 'gentle', 'soft', 'smooth', 'relax', 'serene', 'easy']
+            }
             
-            # Check track name for emotional keywords (English)
-            for keyword in happy_keywords:
-                if keyword in track_lower:
-                    return "happy_energetic"
+            # Hindi/Urdu music keywords
+            hindi_music_keywords = {
+                'energetic_fast': ['nacho', 'gao', 'masti', 'rang', 'bhangra', 'dhol'],
+                'happy_energetic': ['khushi', 'maza', 'fun', 'masti', 'rang'],
+                'romantic': ['pyaar', 'mohabbat', 'dil', 'jaan', 'sajan', 'prem', 'ishq'],
+                'sad_melancholic': ['dukh', 'dard', 'aansu', 'tanha', 'udaas', 'gham'],
+                'happy_calm': ['sukoon', 'aaram', 'chain', 'shanti']
+            }
             
-            for keyword in sad_keywords:
-                if keyword in track_lower:
-                    return "sad_melancholic"
-            
-            for keyword in romantic_keywords:
-                if keyword in track_lower:
-                    return "romantic"
-            
-            for keyword in energetic_keywords:
-                if keyword in track_lower:
-                    return "energetic_fast"
-            
-            for keyword in calm_keywords:
-                if keyword in track_lower:
-                    return "happy_calm"
-            
-            for keyword in nostalgic_keywords:
-                if keyword in track_lower:
-                    return "nostalgic"
+            # Check track name for music context keywords
+            for mood, keywords in music_keywords.items():
+                for keyword in keywords:
+                    if keyword in track_lower:
+                        return mood
             
             # Check for Hindi/Urdu keywords
-            for keyword in hindi_happy:
-                if keyword in track_lower:
-                    return "happy_energetic"
+            for mood, keywords in hindi_music_keywords.items():
+                for keyword in keywords:
+                    if keyword in track_lower:
+                        return mood
             
-            for keyword in hindi_sad:
-                if keyword in track_lower:
-                    return "sad_melancholic"
-            
-            for keyword in hindi_romantic:
-                if keyword in track_lower:
-                    return "romantic"
-            
-            # Check artist name for genre hints
-            if any(genre in artist_lower for genre in ['rock', 'metal', 'punk', 'hardcore']):
+            # Artist-based analysis
+            if any(genre in artist_lower for genre in ['rock', 'metal', 'punk', 'hardcore', 'edm', 'dance']):
                 return "energetic_fast"
-            elif any(genre in artist_lower for genre in ['jazz', 'classical', 'ambient', 'lofi']):
+            elif any(genre in artist_lower for genre in ['jazz', 'classical', 'ambient', 'lofi', 'chill']):
                 return "happy_calm"
-            elif any(genre in artist_lower for genre in ['pop', 'dance', 'electronic', 'edm', 'house']):
-                return "happy_danceable"
+            elif any(genre in artist_lower for genre in ['pop', 'indie', 'alternative']):
+                return "happy_energetic"
             elif any(genre in artist_lower for genre in ['rap', 'hip', 'trap']):
                 return "energetic_fast"
-            elif any(genre in artist_lower for genre in ['country', 'folk', 'acoustic']):
-                return "happy_calm"
             elif any(genre in artist_lower for genre in ['bollywood', 'indian', 'hindi', 'punjabi']):
                 return "romantic"  # Default for Indian music
             
-            return "neutral"
-            
+            # Default based on context
+            if 'upbeat' in context_lower or 'party' in context_lower:
+                return "happy_energetic"
+            elif 'romantic' in context_lower:
+                return "romantic"
+            else:
+                return "neutral"
+                
         except Exception as e:
-            print(f"Error in fallback emotional context analysis: {e}")
+            print(f"Error in music context analysis: {e}")
             return "neutral"
     
+    def get_similar_artists(self, artist_name: str, access_token: str, limit: int = 3) -> List[str]:
+        """Get similar artists for variety in recommendations"""
+        try:
+            # First get artist ID
+            artist_id = self.get_artist_id(artist_name, access_token)
+            if not artist_id:
+                return []
+            
+            # Get similar artists from Spotify
+            url = f"https://api.spotify.com/v1/artists/{artist_id}/related-artists"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                similar_artists = []
+                for artist in data.get('artists', [])[:limit]:
+                    similar_artists.append(artist.get('name', ''))
+                return similar_artists
+            else:
+                print(f"Error getting similar artists: {response.status_code}")
+                return []
+                
+        except Exception as e:
+            print(f"Error in get_similar_artists: {e}")
+            return []
+
     def get_artist_genre_fallback(self, artist_name: str) -> str:
         """Fallback genre detection when Spotify genres are not available"""
         try:
@@ -933,80 +1081,82 @@ class SpotifyService:
             return False
     
     def get_token_scopes(self, access_token: str) -> List[str]:
-        """Get the scopes associated with the current access token"""
+        """Get scopes from token by making a test API call"""
         try:
-            # Get user profile to check scopes (if available)
-            url = f"{self.base_url}/me"
             headers = {"Authorization": f"Bearer {access_token}"}
+            response = requests.get(f"{self.base_url}/me", headers=headers, timeout=5)
             
-            response = requests.get(url, headers=headers, timeout=5)
             if response.status_code == 200:
-                user_data = response.json()
-                # Note: Spotify doesn't return scopes in user profile
-                # We'll infer from what endpoints work
-                return self._infer_token_scopes(access_token)
+                # Token is valid, but we can't get scopes from this endpoint
+                # Return default scopes that we request
+                return [
+                    "user-read-private",
+                    "user-read-email", 
+                    "user-top-read",
+                    "user-read-recently-played",
+                    "playlist-modify-public",
+                    "playlist-modify-private",
+                    "user-read-playback-state",
+                    "user-read-currently-playing"
+                ]
             else:
-                print(f"Could not get user profile: {response.status_code}")
                 return []
-                
-        except Exception as e:
-            print(f"Error getting token scopes: {e}")
+        except Exception:
             return []
-    
-    def _infer_token_scopes(self, access_token: str) -> List[str]:
-        """Infer token scopes by testing different endpoints"""
-        scopes = []
-        
-        # Test different endpoints to infer scopes
-        endpoints_to_test = {
-            "user-read-private": f"{self.base_url}/me",
-            "user-top-read": f"{self.base_url}/me/top/artists?limit=1",
-            "user-read-recently-played": f"{self.base_url}/me/player/recently-played?limit=1",
-            "user-read-currently-playing": f"{self.base_url}/me/player/currently-playing",
-            "playlist-modify-public": f"{self.base_url}/me/playlists?limit=1"
-        }
-        
-        for scope, endpoint in endpoints_to_test.items():
-            try:
-                headers = {"Authorization": f"Bearer {access_token}"}
-                response = requests.get(endpoint, headers=headers, timeout=3)
-                
-                if response.status_code in [200, 204]:
-                    scopes.append(scope)
-                    print(f"✅ Scope confirmed: {scope}")
-                else:
-                    print(f"❌ Scope missing: {scope} (status: {response.status_code})")
-                    
-            except Exception as e:
-                print(f"Error testing scope {scope}: {e}")
-        
-        return scopes
 
     def get_fallback_recommendations(self, context_type: str) -> List[Dict]:
-        """Get fallback recommendations for when API calls fail"""
-        fallback_data = {
-            "party": [
-                {"name": "Party Rock Anthem", "artist": "LMFAO", "album": "Sorry for Party Rocking", "year": 2011, "spotify_url": "https://open.spotify.com/track/0IkKz2J93C94Ei4BvDop7P", "affinity_score": 0.9},
-                {"name": "Uptown Funk", "artist": "Mark Ronson ft. Bruno Mars", "album": "Uptown Special", "year": 2014, "spotify_url": "https://open.spotify.com/track/32OlwWuMpZ6b0aN2RZOeMS", "affinity_score": 0.9},
-                {"name": "Blinding Lights", "artist": "The Weeknd", "album": "After Hours", "year": 2020, "spotify_url": "https://open.spotify.com/track/0V3wPSX9ygBnCm8psKIegu", "affinity_score": 0.8},
-                {"name": "Bad Guy", "artist": "Billie Eilish", "album": "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?", "year": 2019, "spotify_url": "https://open.spotify.com/track/5QO79kh1waicV47BqGRL3g", "affinity_score": 0.8},
-                {"name": "Stressed Out", "artist": "Twenty One Pilots", "album": "Blurryface", "year": 2015, "spotify_url": "https://open.spotify.com/track/3CRDbSIZ4r5MsZ0YwxuEkn", "affinity_score": 0.7}
+        """Get fallback recommendations when APIs fail"""
+        fallback_artists = {
+            "workout": [
+                {"name": "The Weeknd", "popularity": 0.9},
+                {"name": "Dua Lipa", "popularity": 0.8},
+                {"name": "Post Malone", "popularity": 0.8},
+                {"name": "Ariana Grande", "popularity": 0.9},
+                {"name": "Drake", "popularity": 0.9}
             ],
-            "sad": [
-                {"name": "Someone Like You", "artist": "Adele", "album": "21", "year": 2011, "spotify_url": "https://open.spotify.com/track/1zwMYTA5nlNjZxYrvBB2pV", "affinity_score": 0.9},
-                {"name": "All of Me", "artist": "John Legend", "album": "Love in the Future", "year": 2013, "spotify_url": "https://open.spotify.com/track/3U4isOIWM3VvDubwSI3y7a", "affinity_score": 0.8},
-                {"name": "Say You Won't Let Go", "artist": "James Arthur", "album": "Back from the Edge", "year": 2016, "spotify_url": "https://open.spotify.com/track/5uCax9HTNlzGybIStD3vDh", "affinity_score": 0.8},
-                {"name": "Perfect", "artist": "Ed Sheeran", "album": "÷ (Divide)", "year": 2017, "spotify_url": "https://open.spotify.com/track/0tgVpDi06FyKpA1z0VMD4v", "affinity_score": 0.7},
-                {"name": "Photograph", "artist": "Ed Sheeran", "album": "x", "year": 2014, "spotify_url": "https://open.spotify.com/track/6fxVffaTuwjgEk5h9QyRjy", "affinity_score": 0.7}
+            "study": [
+                {"name": "Lofi Girl", "popularity": 0.7},
+                {"name": "Chillhop Music", "popularity": 0.6},
+                {"name": "Spotify", "popularity": 0.8},
+                {"name": "Peaceful Piano", "popularity": 0.6},
+                {"name": "Deep Focus", "popularity": 0.7}
+            ],
+            "party": [
+                {"name": "The Weeknd", "popularity": 0.9},
+                {"name": "Dua Lipa", "popularity": 0.8},
+                {"name": "Bad Bunny", "popularity": 0.9},
+                {"name": "Taylor Swift", "popularity": 0.9},
+                {"name": "Drake", "popularity": 0.9}
+            ],
+            "relaxation": [
+                {"name": "Lofi Girl", "popularity": 0.7},
+                {"name": "Chillhop Music", "popularity": 0.6},
+                {"name": "Peaceful Piano", "popularity": 0.6},
+                {"name": "Nature Sounds", "popularity": 0.5},
+                {"name": "Ambient Music", "popularity": 0.6}
+            ],
+            "romantic": [
+                {"name": "Ed Sheeran", "popularity": 0.8},
+                {"name": "Adele", "popularity": 0.9},
+                {"name": "John Legend", "popularity": 0.7},
+                {"name": "Sam Smith", "popularity": 0.8},
+                {"name": "Lewis Capaldi", "popularity": 0.7}
             ]
         }
         
-        return fallback_data.get(context_type, fallback_data["party"])
-    
+        return fallback_artists.get(context_type, fallback_artists["party"])
+
     def _generate_state(self) -> str:
         """Generate random state parameter"""
-        return ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=32))
+        import secrets
+        return secrets.token_urlsafe(32)
     
     def _build_query_string(self, params: Dict) -> str:
         """Build query string from parameters"""
-        return '&'.join([f"{k}={v}" for k, v in params.items()]) 
+        return "&".join([f"{k}={v}" for k, v in params.items()])
+    
+    def clear_artist_cache(self):
+        """Clear the artist cache to free memory"""
+        self.artist_cache.clear()
+        self.artist_search_cache.clear()
+        print("Artist cache cleared") 

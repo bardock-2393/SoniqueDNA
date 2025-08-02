@@ -2051,13 +2051,13 @@ const MusicDashboard: React.FC = () => {
                   </div>
 
                   {/* Description */}
-                  {(selectedRec.properties?.description || selectedRec.properties?.short_description) && (
+                  {(selectedRec.properties?.description || selectedRec.properties?.short_description || selectedRec.description) && (
                     <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
                       <h4 className="font-comic font-bold text-sm mb-2 text-black">Description</h4>
                       <div
                         className="text-sm text-gray-700 font-comic leading-relaxed"
                         dangerouslySetInnerHTML={{
-                          __html: (selectedRec.properties?.description || selectedRec.properties?.short_description || '').replace(/\n/g, '<br />')
+                          __html: (selectedRec.properties?.description || selectedRec.properties?.short_description || selectedRec.description || '').replace(/\n/g, '<br />')
                         }}
                       />
                     </div>
@@ -2068,90 +2068,16 @@ const MusicDashboard: React.FC = () => {
                     <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3">
                       <h4 className="font-comic font-bold text-sm mb-2 text-black">Tags</h4>
                       <div className="flex flex-wrap gap-2">
-                        {(() => {
-                          const genreTags = selectedRec.tags.filter((tag: any) => tag.type && tag.type.includes('genre'));
-                          const otherTags = selectedRec.tags.filter((tag: any) => !(tag.type && tag.type.includes('genre')));
-                          const shownTags = [...genreTags, ...otherTags].slice(0, 8);
-                          return shownTags.map((tag: any) => (
-                            <Badge key={tag.id} className="bg-yellow-100 border border-black text-black text-xs font-bold font-comic">
-                              {tag.name}
-                            </Badge>
-                          ));
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Details */}
-                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
-                    <h4 className="font-comic font-bold text-sm mb-2 text-black">Details</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700 font-comic">
-                      {selectedDomain === 'movie' && selectedRec.properties?.duration && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">Duration:</span> {Math.floor(selectedRec.properties.duration / 60)}h {selectedRec.properties.duration % 60}m
-                        </div>
-                      )}
-                      {selectedDomain === 'book' && selectedRec.properties?.page_count && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">Pages:</span> {selectedRec.properties.page_count}
-                        </div>
-                      )}
-                      {selectedDomain === 'book' && selectedRec.properties?.isbn13 && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">ISBN:</span> {selectedRec.properties.isbn13}
-                        </div>
-                      )}
-                      {selectedDomain === 'podcast' && selectedRec.properties?.episode_count && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">Episodes:</span> {selectedRec.properties.episode_count}
-                        </div>
-                      )}
-                      {selectedDomain === 'TV show' && (selectedRec.properties?.release_year && selectedRec.properties?.finale_year) && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">Years:</span> {selectedRec.properties.release_year} - {selectedRec.properties.finale_year}
-                        </div>
-                      )}
-                      {selectedDomain === 'music artist' && selectedRec.properties?.date_of_birth && (
-                        <div className="bg-white border border-gray-200 rounded p-2">
-                          <span className="font-bold">Born:</span> {selectedRec.properties.date_of_birth}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* External Links */}
-                  {selectedRec.external && (
-                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3">
-                      <h4 className="font-comic font-bold text-sm mb-2 text-black">External Links</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(selectedRec.external).map(([key, arr]: [string, any]) => (
-                          arr && arr.length > 0 && arr.map((ext: any, i: number) => {
-                            let url = '';
-                            let icon = '🔗';
-                            if (key === 'imdb') { url = `https://www.imdb.com/name/${ext.id}`; icon = '🎬'; }
-                            if (key === 'goodreads') { url = `https://www.goodreads.com/book/show/${ext.id}`; icon = '📚'; }
-                            if (key === 'spotify') { url = `https://open.spotify.com/artist/${ext.id}`; icon = '🎵'; }
-                            if (key === 'wikidata') { url = `https://www.wikidata.org/wiki/${ext.id}`; icon = '📖'; }
-                            if (key === 'musicbrainz') { url = `https://musicbrainz.org/artist/${ext.id}`; icon = '🎼'; }
-                            if (key === 'lastfm') { url = `https://www.last.fm/music/${ext.id}`; icon = '🎧'; }
-                            if (!url) return null;
-                            return (
-                              <a
-                                key={key + i}
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 bg-white border-2 border-black rounded-lg px-3 py-2 text-xs font-bold font-comic text-black hover:bg-yellow-100 transition-colors comic-shadow"
-                              >
-                                <span>{icon}</span>
-                                <span>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
-                              </a>
-                            );
-                          })
+                        {selectedRec.tags.slice(0, 8).map((tag: any, index: number) => (
+                          <Badge key={index} className="bg-yellow-100 border border-black text-black text-xs font-bold font-comic">
+                            {typeof tag === 'string' ? tag : tag.name || tag}
+                          </Badge>
                         ))}
                       </div>
                     </div>
                   )}
+
+
                 </div>
 
                 {/* Fixed Footer */}

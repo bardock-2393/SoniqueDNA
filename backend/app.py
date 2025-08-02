@@ -19,12 +19,18 @@ from routes.recommendations import recommendation_routes
 from routes.playlists import playlist_routes
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:8080', 'http://127.0.0.1:8080'], supports_credentials=True)
+CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:8080', 'http://127.0.0.1:8080', 'http://localhost:4173', 'http://127.0.0.1:4173'], supports_credentials=True)
 
 # Initialize services
 spotify_service = SpotifyService()
 qloo_service = QlooService()
 gemini_service = GeminiService()
+
+# Initialize cache for cross-domain recommendations (home page only)
+crossdomain_cache = {}
+CACHE_EXPIRY = 3600  # 1 hour in seconds
+
+
 
 # Register route blueprints
 app.register_blueprint(auth_routes, url_prefix='/auth')
@@ -248,10 +254,11 @@ def spotify_session_clear_direct():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/musicrecommandation', methods=['POST'])
 @app.route('/musicrecommendation', methods=['POST'])
 def music_recommendation_direct():
     """Optimized music recommendations with batch processing - frontend compatibility"""
+    import time
+    import random
     start_time = time.time()
     try:
         data = request.get_json()
@@ -271,7 +278,7 @@ def music_recommendation_direct():
         
         # Get location parameters
         location = data.get("location")
-        location_radius = data.get("location_radius", 5000000)  # 5000km radius for global coverage
+        location_radius = data.get("location_radius", 50000)  # Default 50km radius
         
         print(f"[OPTIMIZED] Starting music recommendation with context: {user_context[:50]}...")
         
@@ -284,6 +291,31 @@ def music_recommendation_direct():
         user_country = user_data["profile"].get("country", "US")
         user_artists = user_data["artists"]
         user_tracks = user_data["tracks"]
+        
+        # Debug: Print country detection
+        print(f"[COUNTRY DEBUG] Music recommendation route - User Country: {user_country}")
+        print(f"[COUNTRY DEBUG] User Profile: {user_data['profile']}")
+        
+        # If no location provided, derive from user country
+        if not location and user_country:
+            location_map = {
+                "IN": "Mumbai, India",
+                "US": "New York, USA", 
+                "GB": "London, UK",
+                "CA": "Toronto, Canada",
+                "AU": "Sydney, Australia",
+                "DE": "Berlin, Germany",
+                "FR": "Paris, France",
+                "JP": "Tokyo, Japan",
+                "KR": "Seoul, South Korea",
+                "BR": "São Paulo, Brazil"
+            }
+            location = location_map.get(user_country, "New York, USA")
+            print(f"[LOCATION] Derived location from country {user_country}: {location}")
+        elif location:
+            print(f"[LOCATION] Using provided location: {location}")
+        else:
+            print(f"[LOCATION] No location provided and no country available - using global recommendations")
         
         # Create user session for tracking
         session_id = db_service.create_user_session(user_id, spotify_token, user_country, user_context)
@@ -304,13 +336,18 @@ def music_recommendation_direct():
         
         print(f"[ENHANCED CONTEXT] Context: {context_type}, Mood: {mood_preference.get('primary_mood')}, Language: {language_preference.get('primary_language')}")
         
-        # Step 3: Generate enhanced tags using Gemini (batch processing)
-        enhanced_tags = gemini_service.generate_enhanced_tags(user_context, user_country, location)
+        # Step 3: Generate enhanced tags using Gemini (batch processing) with variety
+        # Add variety to tag generation context
+        tag_variety_seed = int(time.time() * 1000) % 10000
+        context_with_variety = f"{user_context} {tag_variety_seed} {int(time.time()) % 1000}"
+        
+        enhanced_tags = gemini_service.generate_enhanced_tags(context_with_variety, user_country, location)
         if not enhanced_tags:
             print("Warning: No enhanced tags generated, using fallback tags")
             enhanced_tags = ["upbeat", "energetic", "pop", "mainstream"]
         
-        print(f"[ENHANCED] Generated {len(enhanced_tags)} enhanced tags: {enhanced_tags}")
+        print(f"[ENHANCED] Generated {len(enhanced_tags)} enhanced tags with variety: {enhanced_tags}")
+        print(f"[VARIETY] Tag generation variety seed: {tag_variety_seed}")
         
         # Step 4: Generate cultural context
         cultural_context = gemini_service.generate_cultural_context(user_country, location)
@@ -320,29 +357,155 @@ def music_recommendation_direct():
             location = cultural_context["location"]
             print(f"[LOCATION] Using default location from cultural context: {location}")
         
-        # Step 5: Filter and rank tags for music (batch processing)
-        filtered_tags = gemini_service.filter_and_rank_tags_for_music(enhanced_tags, user_context, user_country, location)
-        print(f"[TAG FILTERING] Filtered from {len(enhanced_tags)} to {len(filtered_tags)} most relevant tags")
+        # Step 5: Generate cultural context tags and send directly to Qloo until 5 accepted
+        print(f"[CULTURAL CONTEXT] Generated: {cultural_context}")
         
-        # Step 6: Get Qloo tag IDs (batch processing)
-        tag_ids = qloo_service.get_tag_ids_fast(filtered_tags)
-        if not tag_ids:
-            print("Warning: No Qloo tag IDs found, using fallback approach")
-            tag_ids = qloo_service.get_fallback_tag_ids("music")
+        # Create tags from cultural context, sorted by user context relevance
+        cultural_tags = cultural_context.get("cultural_elements", []) + cultural_context.get("popular_genres", [])
         
-        print(f"Found {len(tag_ids)} Qloo tag IDs from {len(filtered_tags)} filtered tags")
+        # Add context-specific tags based on user input
+        context_tags = []
+        context_lower = user_context.lower()
         
-        # Step 7: Get enhanced recommendations with cultural intelligence (batch processing)
-        enhanced_recommendations = qloo_service.get_enhanced_recommendations(
-            tag_ids=tag_ids,
-            user_artists=user_artists[:8],  # Reduced for speed
-            user_tracks=user_tracks[:8],    # Reduced for speed
+        if any(word in context_lower for word in ['party', 'dance', 'upbeat', 'energetic']):
+            context_tags = ['upbeat', 'dance', 'energetic', 'party', 'electronic']
+        elif any(word in context_lower for word in ['sad', 'melancholy', 'emotional']):
+            context_tags = ['emotional', 'melancholy', 'sad', 'romantic', 'drama']
+        elif any(word in context_lower for word in ['romantic', 'love', 'passionate']):
+            context_tags = ['romantic', 'love', 'passionate', 'emotional', 'drama']
+        elif any(word in context_lower for word in ['workout', 'gym', 'running']):
+            context_tags = ['energetic', 'upbeat', 'electronic', 'dance', 'pop']
+        elif any(word in context_lower for word in ['study', 'work', 'focus']):
+            context_tags = ['calm', 'relax', 'ambient', 'instrumental', 'chill']
+        else:
+            context_tags = ['contemporary', 'mainstream', 'popular', 'cultural', 'diverse']
+        
+        # Combine and prioritize: context tags first, then cultural tags
+        all_tags = context_tags + cultural_tags
+        all_tags = list(dict.fromkeys(all_tags))  # Remove duplicates
+        
+        print(f"[TAGS] Context-specific tags: {context_tags}")
+        print(f"[TAGS] Cultural tags: {cultural_tags}")
+        print(f"[TAGS] Combined tags: {all_tags}")
+        
+        # Send tags to Qloo until 5 are accepted
+        tag_ids = []
+        max_attempts = 10  # Prevent infinite loops
+        attempt = 0
+        
+        while len(tag_ids) < 5 and attempt < max_attempts:
+            attempt += 1
+            print(f"[QLOO ATTEMPT {attempt}] Trying to get 5 accepted tags...")
+            
+            # Try current tag set
+            current_tag_ids = qloo_service.get_tag_ids_fast(all_tags)
+            tag_ids.extend(current_tag_ids)
+            
+            # Remove duplicates
+            tag_ids = list(dict.fromkeys(tag_ids))
+            
+            print(f"[QLOO ATTEMPT {attempt}] Got {len(tag_ids)} accepted tags so far")
+            
+            # If we have 5 or more tags, we're done
+            if len(tag_ids) >= 5:
+                tag_ids = tag_ids[:5]  # Limit to exactly 5
+                print(f"[SUCCESS] Got {len(tag_ids)} accepted tags after {attempt} attempts")
+                break
+            
+            # If we need more tags, add fallback tags
+            if attempt < max_attempts - 1:
+                print(f"[NEED MORE TAGS] Only got {len(tag_ids)} tags, adding fallback tags...")
+                
+                # Add fallback tags based on context
+                fallback_tags = []
+                if len(tag_ids) < 3:
+                    fallback_tags = ['pop', 'mainstream', 'contemporary', 'cultural', 'diverse']
+                elif len(tag_ids) < 4:
+                    fallback_tags = ['energetic', 'upbeat', 'romantic', 'drama']
+                else:
+                    fallback_tags = ['electronic', 'dance', 'indie', 'alternative']
+                
+                all_tags.extend(fallback_tags)
+                all_tags = list(dict.fromkeys(all_tags))  # Remove duplicates
+                print(f"[FALLBACK] Added tags: {fallback_tags}")
+        
+        print(f"[FINAL RESULT] Using {len(tag_ids)} accepted tags: {tag_ids}")
+        
+        # Step 7: Get music recommendations with user signals (music-specific method)
+        print(f"[QLOO LOCATION] Calling Qloo with location: {location}, radius: {location_radius}m")
+
+        # Add variety mechanism to prevent same recommendations
+        variety_seed = int(time.time() * 1000) % 10000
+        random.seed(variety_seed + hash(user_context) % 1000)
+        print(f"[VARIETY] Using variety seed: {variety_seed} for unique recommendations")
+
+        # Convert user data to the format expected by music recommendations
+        user_artist_ids = [artist.get('id', '') for artist in user_artists[:8] if isinstance(artist, dict) and artist.get('id')]
+        user_track_ids = [track.get('id', '') for track in user_tracks[:8] if isinstance(track, dict) and track.get('id')]
+
+        # Filter tags to ensure only music tags are used (exclude media tags)
+        music_tag_ids = []
+        for tag_id in tag_ids:
+            if 'music' in tag_id and 'media' not in tag_id:
+                music_tag_ids.append(tag_id)
+            elif 'genre:music:' in tag_id:
+                music_tag_ids.append(tag_id)
+        
+        if not music_tag_ids:
+            print("[MUSIC TAGS] No music tags found, using fallback music tags")
+            music_tag_ids = [
+                "urn:tag:genre:music:pop",
+                "urn:tag:genre:music:rock", 
+                "urn:tag:genre:music:electronic",
+                "urn:tag:genre:music:hip_hop",
+                "urn:tag:genre:music:indie"
+            ]
+        
+        print(f"[MUSIC TAGS] Using {len(music_tag_ids)} music-specific tags: {music_tag_ids}")
+
+        # Try music-specific recommendations first with variety
+        # Add variety to prevent same results
+        variety_offset = variety_seed % 5  # Use variety seed to offset results
+        enhanced_recommendations = qloo_service.get_music_recommendations_with_user_signals(
+            tag_ids=music_tag_ids,
+            user_artist_ids=user_artist_ids,
+            user_track_ids=user_track_ids,
+            user_country=user_country,
             location=location,
             location_radius=location_radius,
-            cultural_context=cultural_context,
-            limit=15  # Reduced for speed
+            limit=20 + variety_offset  # Vary the limit for more variety
         )
         
+        # If music-specific fails, try cross-domain with music focus
+        if not enhanced_recommendations or len(enhanced_recommendations) == 0:
+            print("[MUSIC FALLBACK] Music-specific API returned 0 results, trying cross-domain with music focus")
+            enhanced_recommendations = qloo_service.get_enhanced_recommendations(
+                tag_ids=music_tag_ids,
+                user_artists=user_artists[:8],
+                user_tracks=user_tracks[:8],
+                location=location,
+                location_radius=location_radius,
+                cultural_context=cultural_context,
+                limit=20
+            )
+
+        # Add variety and prevent duplicates
+        if enhanced_recommendations:
+            # Shuffle recommendations for variety
+            random.shuffle(enhanced_recommendations)
+            
+            # Remove duplicates while preserving order
+            seen_artists = set()
+            unique_recommendations = []
+            for rec in enhanced_recommendations:
+                artist_name = rec.get("name", "").lower()
+                if artist_name and artist_name not in seen_artists:
+                    unique_recommendations.append(rec)
+                    seen_artists.add(artist_name)
+            
+            enhanced_recommendations = unique_recommendations[:15]
+            print(f"[VARIETY] Shuffled and deduplicated to {len(enhanced_recommendations)} unique artists")
+
         # Extract artist names from enhanced recommendations
         qloo_reco_artists = []
         for artist in enhanced_recommendations[:15]:
@@ -353,11 +516,70 @@ def music_recommendation_direct():
             else:
                 qloo_reco_artists.append(str(artist))
         print(f"[ENHANCED] Got {len(qloo_reco_artists)} enhanced Qloo recommended artists")
-        
-        # If Qloo failed completely, use Spotify data directly
+
+        # Step 7.5: Apply AI relevance scoring and randomization to Qloo artists
+        if qloo_reco_artists and len(qloo_reco_artists) > 0:
+            print(f"[RELEVANCE SCORING] Applying AI relevance scoring to {len(qloo_reco_artists)} artists")
+            
+            try:
+                # Create artist objects with metadata for scoring
+                artist_objects = []
+                for artist_name in qloo_reco_artists:
+                    if artist_name and isinstance(artist_name, str):
+                        artist_objects.append({
+                            "name": artist_name,
+                            "relevance_score": 0.0,
+                            "context_match": 0.0,
+                            "cultural_relevance": 0.0
+                        })
+                
+                # Apply AI relevance scoring using Gemini
+                scored_artists = gemini_service.ai_sort_by_relevance(
+                    entities=artist_objects,
+                    user_artists=user_artists,
+                    user_genres=[],  # We'll extract genres from user_artists
+                    context_type="music",
+                    user_country=user_country,
+                    location=location,
+                    user_preferences={
+                        "context": user_context,
+                        "mood": mood_preference.get('primary_mood', 'neutral'),
+                        "language": language_preference.get('primary_language', 'any')
+                    },
+                    user_context=user_context
+                )
+                
+                # Extract scored artist names
+                qloo_reco_artists = [artist.get("name", "") for artist in scored_artists if artist.get("name")]
+                print(f"[RELEVANCE SCORING] Scored and sorted {len(qloo_reco_artists)} artists by relevance")
+                
+                # Apply controlled randomization for variety
+                if len(qloo_reco_artists) > 5:
+                    # Keep top 3 most relevant, randomize the rest
+                    top_artists = qloo_reco_artists[:3]
+                    remaining_artists = qloo_reco_artists[3:]
+                    
+                    # Use variety seed for consistent randomization
+                    variety_seed = int(time.time() * 1000) % 10000
+                    random.seed(variety_seed + hash(user_context) % 1000)
+                    random.shuffle(remaining_artists)
+                    
+                    # Combine: top 3 + randomized rest
+                    qloo_reco_artists = top_artists + remaining_artists
+                    print(f"[RANDOMIZATION] Applied controlled randomization with seed {variety_seed}")
+                    print(f"[RANDOMIZATION] Top 3 kept, {len(remaining_artists)} randomized")
+                
+            except Exception as e:
+                print(f"[RELEVANCE SCORING] Error in AI scoring: {e}")
+                # Fallback: simple randomization
+                random.shuffle(qloo_reco_artists)
+                print(f"[RANDOMIZATION] Applied simple randomization due to scoring error")
+
+        # If Qloo failed completely, use enhanced Spotify data with variety
         if len(qloo_reco_artists) == 0:
-            print("Qloo returned no recommendations, using Spotify data directly")
-            # Use Spotify user artists and similar artists
+            print("[MUSIC FALLBACK] Qloo returned no recommendations, using enhanced Spotify data")
+            
+            # Get user's top artists with variety
             spotify_artist_names = []
             for artist in user_artists[:15]:
                 if isinstance(artist, dict):
@@ -367,8 +589,24 @@ def music_recommendation_direct():
                 else:
                     spotify_artist_names.append(str(artist))
             
-            qloo_reco_artists = spotify_artist_names
-            print(f"Using {len(qloo_reco_artists)} Spotify artists as recommendations")
+            # Add similar artists for variety
+            try:
+                similar_artists = []
+                for artist_name in spotify_artist_names[:5]:  # Get similar for top 5
+                    similar = spotify_service.get_similar_artists(artist_name, spotify_token, limit=3)
+                    similar_artists.extend(similar)
+                
+                # Combine and shuffle for variety
+                all_artists = spotify_artist_names + similar_artists
+                random.shuffle(all_artists)
+                qloo_reco_artists = all_artists[:12]  # Get more variety
+                print(f"[MUSIC FALLBACK] Using {len(qloo_reco_artists)} artists (user + similar) with variety")
+            except Exception as e:
+                print(f"[MUSIC FALLBACK] Error getting similar artists: {e}")
+                # Fallback to just user artists
+                random.shuffle(spotify_artist_names)
+                qloo_reco_artists = spotify_artist_names[:10]
+                print(f"[MUSIC FALLBACK] Using {len(qloo_reco_artists)} shuffled user artists")
         
         # Step 8: Fast language filtering using known artist lists
         if language_preference and language_preference.get('primary_language') != 'any':
@@ -440,8 +678,18 @@ def music_recommendation_direct():
         playlist = []
         seen_tracks = set()
         
-        # Shuffle artists to prevent repetition patterns
+        # Shuffle artists to prevent repetition patterns with location-based seed
         import random
+        if location:
+            # Use location-based seed for consistent but varied results
+            location_seed = hash(location) % 10000
+            random.seed(location_seed + int(time.time() * 1000) % 1000)
+            print(f"[VARIETY] Using location-based seed: {location_seed} for consistent variety")
+        else:
+            # Use time-based seed for global recommendations
+            random.seed(int(time.time() * 1000) % 10000)
+            print(f"[VARIETY] Using time-based seed for global variety")
+        
         shuffled_artists = qloo_reco_artists[:15]  # Process top 15 artists
         random.shuffle(shuffled_artists)
         
@@ -500,13 +748,13 @@ def music_recommendation_direct():
                                     track["audio_features"] = features
                                     print(f"[EMOTIONAL CONTEXT] {track.get('name', 'Unknown')} - {emotional_context}")
                                 else:
-                                    # Fallback: determine emotional context from track name and artist
-                                    emotional_context = spotify_service.analyze_track_emotional_context_fallback(track.get('name', ''), artist_name)
-                                    print(f"[EMOTIONAL CONTEXT FALLBACK] {track.get('name', 'Unknown')} - {emotional_context}")
+                                    # Enhanced fallback: analyze track name and artist for music context
+                                    emotional_context = spotify_service.analyze_track_music_context(track.get('name', ''), artist_name, context_type)
+                                    print(f"[MUSIC CONTEXT] {track.get('name', 'Unknown')} - {emotional_context}")
                             else:
-                                # Audio features not available - use fallback
-                                emotional_context = spotify_service.analyze_track_emotional_context_fallback(track.get('name', ''), artist_name)
-                                print(f"[EMOTIONAL CONTEXT FALLBACK] {track.get('name', 'Unknown')} - {emotional_context}")
+                                # Audio features not available - use music-specific analysis
+                                emotional_context = spotify_service.analyze_track_music_context(track.get('name', ''), artist_name, context_type)
+                                print(f"[MUSIC CONTEXT] {track.get('name', 'Unknown')} - {emotional_context}")
                             
                             # Try to get artist genres (optional)
                             artist_genres = spotify_service.get_spotify_artist_genres(artist_name, spotify_token)
@@ -585,17 +833,41 @@ def music_recommendation_direct():
                 print(f"Error getting tracks for artist {artist_name}: {e}")
                 continue
         
-        # Step 11: Ensure we have tracks - fallback if playlist is empty
+        # Step 11: Ensure we have tracks - music-specific fallback if playlist is empty
         if len(playlist) == 0:
-            print(f"[WARNING] No tracks found, using {context_type} fallback")
+            print(f"[MUSIC FALLBACK] No tracks found, using music-specific {context_type} fallback")
             try:
+                # Try to get trending tracks for the specific context
                 playlist = spotify_service.get_trending_tracks_for_context(context_type, spotify_token, limit=15)
-                print(f"[FALLBACK] Got {len(playlist)} trending tracks")
+                print(f"[MUSIC FALLBACK] Got {len(playlist)} trending tracks for {context_type}")
             except Exception as e:
-                print(f"[ERROR] Fallback also failed: {e}")
-                # Final fallback - create context-appropriate tracks
-                playlist = spotify_service.get_hardcoded_fallback_tracks(context_type)
-                print(f"[FALLBACK] Added {len(playlist)} hardcoded fallback tracks")
+                print(f"[MUSIC FALLBACK] Trending tracks failed: {e}")
+                try:
+                    # Try to get user's top tracks as fallback
+                    user_tracks = spotify_service.get_top_tracks_detailed(spotify_token, limit=15)
+                    if user_tracks:
+                        playlist = []
+                        for track in user_tracks:
+                            track_obj = {
+                                "name": track.get("name", "Unknown Track"),
+                                "artist": track.get("artists", [{}])[0].get("name", "Unknown Artist") if track.get("artists") else "Unknown Artist",
+                                "album_name": track.get("album", {}).get("name", "Unknown Album"),
+                                "release_year": str(track.get("album", {}).get("release_date", ""))[:4] if track.get("album", {}).get("release_date") else "Unknown",
+                                "album_art_url": track.get("album", {}).get("images", [{}])[0].get("url", "/placeholder.svg") if track.get("album", {}).get("images") else "/placeholder.svg",
+                                "preview_url": track.get("preview_url"),
+                                "url": track.get("external_urls", {}).get("spotify", "#"),
+                                "personalization_score": 0.8,  # High score for user's own tracks
+                                "context_score": 1.8,
+                                "emotional_context": "neutral",
+                                "primary_genre": "user_favorite"
+                            }
+                            playlist.append(track_obj)
+                        print(f"[MUSIC FALLBACK] Using {len(playlist)} user's top tracks as fallback")
+                except Exception as e2:
+                    print(f"[MUSIC FALLBACK] User tracks also failed: {e2}")
+                    # Final fallback - create context-appropriate tracks
+                    playlist = spotify_service.get_hardcoded_fallback_tracks(context_type)
+                    print(f"[MUSIC FALLBACK] Added {len(playlist)} hardcoded fallback tracks")
         
         # Step 12: Deduplicate tracks and apply AI-powered relevance scoring
         unique_playlist = []
@@ -635,13 +907,13 @@ def music_recommendation_direct():
                 
                 ai_sorted_playlist = gemini_service.ai_sort_by_relevance(
                     entities=tracks_for_ai,
-                    user_context=user_context,
                     user_artists=formatted_user_artists,
                     user_genres=[artist.get('genres', []) for artist in formatted_user_artists],
                     context_type=context_type,
                     user_country=user_country,
                     location=location,
-                    user_preferences=user_preferences
+                    user_preferences=user_preferences,
+                    user_context=user_context
                 )
                 
                 # Combine AI sorted tracks with remaining tracks
@@ -715,6 +987,28 @@ def music_recommendation_direct():
         display_qloo_artists = ', '.join([str(artist) for artist in qloo_reco_artists[:15]])
         
         # Add Qloo power showcase information
+        # Enhanced cultural tags detection
+        cultural_keywords = [
+            "latin", "k-pop", "afrobeats", "jazz", "blues", "folk", "world", "bollywood", "hindi", "indian", 
+            "cultural", "romantic", "drama", "adventure", "mystery", "comedy", "asian", "western", "european",
+            "african", "middle_eastern", "south_asian", "desi", "pop", "mainstream", "contemporary", "traditional",
+            "emotional", "upbeat", "energetic", "calm", "relaxation", "party", "workout", "study", "social"
+        ]
+        
+        cultural_tags_found = [tag for tag in enhanced_tags if any(cultural_word in tag.lower() for cultural_word in cultural_keywords)]
+        cultural_tags_count = len(cultural_tags_found)
+        
+        # If no cultural tags found but we have cultural context, count it as at least 1
+        if cultural_tags_count == 0 and cultural_context:
+            cultural_tags_count = 1
+            print(f"[QLOO POWER] No cultural tags found in enhanced_tags: {enhanced_tags}, but cultural context exists: {cultural_context}")
+        
+        # If still 0, check if any tags contain cultural elements
+        if cultural_tags_count == 0 and enhanced_tags:
+            # Count any tag that might be cultural based on broader criteria
+            cultural_tags_count = len([tag for tag in enhanced_tags if len(tag) > 3 and not tag.isdigit()])
+            print(f"[QLOO POWER] Using broader cultural detection, found {cultural_tags_count} potential cultural tags from: {enhanced_tags}")
+        
         qloo_power_showcase = {
             "enhanced_system": True,
             "cultural_intelligence": bool(cultural_context),
@@ -722,7 +1016,7 @@ def music_recommendation_direct():
             "multi_strategy_recommendations": True,
             "cross_domain_analysis": True,
             "total_recommendations": len(enhanced_recommendations),
-            "cultural_tags_count": len([tag for tag in enhanced_tags if any(cultural_word in tag.lower() for cultural_word in ["latin", "k-pop", "afrobeats", "jazz", "blues", "folk", "world", "bollywood", "hindi", "indian", "cultural", "romantic", "drama", "adventure", "mystery", "comedy"])]),
+            "cultural_tags_count": cultural_tags_count,
             "location_based_count": len([artist for artist in enhanced_recommendations if artist.get("location_relevance", 0) > 0.1 or artist.get("cultural_relevance", 0) > 0.3]) if enhanced_recommendations else (1 if location else 0)
         }
         
@@ -769,21 +1063,29 @@ def music_recommendation_direct():
                 spotify_user_track_names.append(str(track))
         
         debug_info = {
-            "enhanced_gemini_tags": enhanced_tags,
+            "enhanced_gemini_tags": all_tags,
             "cultural_context": cultural_context,
             "qloo_tag_ids": tag_ids,
+            "music_tag_ids": music_tag_ids if 'music_tag_ids' in locals() else [],
             "spotify_user_artists": spotify_user_artist_names,
             "spotify_user_tracks": spotify_user_track_names,
             "qloo_recommended_artists": qloo_reco_artists,
             "playlist_length": len(playlist),
             "context_type": "enhanced",
             "location_used": location,
-            "user_country": user_country
+            "user_country": user_country,
+            "variety_seeds": {
+                "tag_variety_seed": tag_variety_seed if 'tag_variety_seed' in locals() else None,
+                "recommendation_variety_seed": variety_seed if 'variety_seed' in locals() else None,
+                "location_seed": location_seed if 'location_seed' in locals() else None
+            },
+            "music_fallback_used": len(qloo_reco_artists) == 0,
+            "qloo_entities_received": len(enhanced_recommendations) if 'enhanced_recommendations' in locals() else 0
         }
         
         return jsonify({
             "playlist": playlist,
-            "tags": enhanced_tags,
+            "tags": all_tags,
             "qloo_artists": [{"name": artist} for artist in qloo_reco_artists[:15] if artist],
             "new_artists": new_artists,
             "context_type": "enhanced",
@@ -794,6 +1096,7 @@ def music_recommendation_direct():
             "from_cache": False,
             "generated_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "location_used": location,
+            "location_radius": location_radius if location else None,
             "user_country": user_country,
             "qloo_power_showcase": qloo_power_showcase,
             "enhanced_features": enhanced_features,
@@ -803,7 +1106,10 @@ def music_recommendation_direct():
                 "total_tracks": len(playlist),
                 "scoring_method": "AI-Enhanced Relevance Scoring",
                 "ai_score_weight": 0.7,
-                "traditional_score_weight": 0.3
+                "traditional_score_weight": 0.3,
+                "artists_scored": len(qloo_reco_artists),
+                "relevance_scoring_applied": True,
+                "randomization_applied": True
             },
             "audio_features_status": {
                 "available": audio_features_available,
@@ -811,7 +1117,7 @@ def music_recommendation_direct():
                 "recommendation": "Re-authenticate with updated scopes to enable audio features" if not audio_features_available else "Audio features working correctly"
             },
             "analysis": {
-                "tags_used": enhanced_tags,
+                "tags_used": all_tags,
                 "user_country": user_country,
                 "location_used": location if location else "Global",
                 "location_radius": location_radius if location else None,
@@ -819,7 +1125,18 @@ def music_recommendation_direct():
                 "genre_based": True,
                 "response_time": round(response_time, 2),
                 "batch_processing": True,
-                "optimization_level": "enhanced"
+                "optimization_level": "enhanced",
+                "variety_info": {
+                    "tag_variety_seed": tag_variety_seed if 'tag_variety_seed' in locals() else None,
+                    "recommendation_variety_seed": variety_seed if 'variety_seed' in locals() else None,
+                    "location_seed": location_seed if 'location_seed' in locals() else None,
+                    "unique_artists": len(set(qloo_reco_artists)),
+                    "total_artists": len(qloo_reco_artists),
+                    "relevance_scoring": True,
+                    "controlled_randomization": True,
+                    "top_artists_preserved": 3,
+                    "randomized_artists": max(0, len(qloo_reco_artists) - 3)
+                }
             }
         })
         
@@ -915,109 +1232,6 @@ def music_recommendation_direct():
                 "database_stored": False
             }
         })
-
-@app.route('/music-recommendation', methods=['POST', 'OPTIONS'])
-def music_recommendation():
-    """Get music recommendations based on user prompt + Spotify listening history"""
-    if request.method == 'OPTIONS':
-        return '', 200
-    
-    try:
-        data = request.get_json()
-        user_prompt = data.get('user_prompt', '')  # User's mood/context input
-        spotify_token = data.get('spotify_token', '')
-        limit = data.get('limit', 15)
-        
-        # Input validation
-        if not user_prompt or not spotify_token:
-            return jsonify({'error': 'Missing required parameters: user_prompt and spotify_token'}), 400
-        
-        print(f"[MUSIC RECOMMENDATION] User prompt: {user_prompt}")
-        
-        # Step 1: Get user's Spotify listening history
-        try:
-            # Get user's top artists with genres (long_term for most played)
-            user_artists_data = spotify_service.get_top_artists_with_genres(spotify_token, 20, "long_term")
-            user_artists = [artist['name'] for artist in user_artists_data]
-            user_artist_genres = []
-            for artist in user_artists_data:
-                user_artist_genres.extend(artist.get('genres', []))
-            
-            # Get user's top tracks (long_term for most played)
-            user_tracks_data = spotify_service.get_top_tracks_detailed(spotify_token, 20, "long_term")
-            user_tracks = [track['name'] for track in user_tracks_data]
-            
-            # Get user profile for country/location
-            user_profile = spotify_service.get_user_profile(spotify_token)
-            user_country = user_profile.get('country', 'US') if user_profile else 'US'
-            
-            print(f"[MUSIC RECOMMENDATION] Found {len(user_artists)} artists, {len(user_tracks)} tracks")
-            print(f"[MUSIC RECOMMENDATION] User genres: {list(set(user_artist_genres))[:10]}")
-            
-        except Exception as e:
-            print(f"[MUSIC RECOMMENDATION] Error getting Spotify data: {e}")
-            return jsonify({'error': 'Failed to get Spotify listening history'}), 400
-        
-        # Step 2: Generate tags based on user prompt + user genres
-        try:
-            # Combine user prompt with user's genre preferences
-            context = f"{user_prompt} - User listens to: {', '.join(list(set(user_artist_genres))[:5])}"
-            
-            # Generate tags using Gemini with user's genre context
-            tags = gemini_service.generate_music_tags_from_prompt_and_genres(
-                user_prompt, user_artist_genres, user_country
-            )
-            
-            print(f"[MUSIC RECOMMENDATION] Generated tags: {tags}")
-            
-        except Exception as e:
-            print(f"[MUSIC RECOMMENDATION] Error generating tags: {e}")
-            # Fallback to simple tags
-            tags = ["pop", "mainstream", "indian", "cultural", "contemporary"]
-        
-        # Step 3: Get Qloo tag IDs
-        try:
-            tag_ids = qloo_service.get_tag_ids_fast(tags)
-            print(f"[MUSIC RECOMMENDATION] Found tag IDs: {len(tag_ids)}")
-            
-        except Exception as e:
-            print(f"[MUSIC RECOMMENDATION] Error getting tag IDs: {e}")
-            return jsonify({'error': 'Failed to get tag IDs'}), 400
-        
-        # Step 4: Get music recommendations with user's listening history as signals
-        try:
-            # Convert user data to Qloo signals
-            user_artist_ids = [artist['id'] for artist in user_artists_data[:10]]
-            user_track_ids = [track['id'] for track in user_tracks_data[:10]]
-            
-            recommendations = qloo_service.get_music_recommendations_with_user_signals(
-                tag_ids=tag_ids,
-                user_artist_ids=user_artist_ids,
-                user_track_ids=user_track_ids,
-                user_country=user_country,
-                limit=limit
-            )
-            
-            print(f"[MUSIC RECOMMENDATION] Got {len(recommendations)} recommendations")
-            
-        except Exception as e:
-            print(f"[MUSIC RECOMMENDATION] Error getting recommendations: {e}")
-            return jsonify({'error': 'Failed to get recommendations'}), 400
-        
-        # Step 5: Format response
-        response_data = {
-            "recommendations": recommendations,
-            "user_prompt": user_prompt,
-            "user_artists": user_artists[:10],  # Top 10 most played artists
-            "user_tracks": user_tracks[:10],    # Top 10 most played tracks
-            "user_genres": list(set(user_artist_genres))[:10],  # Unique genres
-            "tags_used": tags,
-            "tag_ids_used": tag_ids,
-            "user_country": user_country,
-            "total_recommendations": len(recommendations)
-        }
-        
-        return jsonify(response_data)
         
     except Exception as e:
         print(f"[MUSIC RECOMMENDATION] Unexpected error: {e}")
@@ -1060,6 +1274,31 @@ def crossdomain_recommendations_direct():
         user_country = user_data["profile"].get("country", "US")
         user_id = user_data["profile"]["user_id"]
         
+        # Debug: Print country detection
+        print(f"[COUNTRY DEBUG] Cross-domain route - User Country: {user_country}")
+        print(f"[COUNTRY DEBUG] User Profile: {user_data['profile']}")
+        
+        # If no location provided, derive from user country
+        if not location and user_country:
+            location_map = {
+                "IN": "Mumbai, India",
+                "US": "New York, USA", 
+                "GB": "London, UK",
+                "CA": "Toronto, Canada",
+                "AU": "Sydney, Australia",
+                "DE": "Berlin, Germany",
+                "FR": "Paris, France",
+                "JP": "Tokyo, Japan",
+                "KR": "Seoul, South Korea",
+                "BR": "São Paulo, Brazil"
+            }
+            location = location_map.get(user_country, "New York, USA")
+            print(f"[LOCATION] Derived location from country {user_country}: {location}")
+        elif location:
+            print(f"[LOCATION] Using provided location: {location}")
+        else:
+            print(f"[LOCATION] No location provided and no country available - using global recommendations")
+        
         # Step 2: Get top artists with images (use top scored artists if available)
         if top_scored_artists and len(top_scored_artists) > 0:
             # Use top scored artists from music recommendations
@@ -1083,6 +1322,28 @@ def crossdomain_recommendations_direct():
         
         # Differentiate between home page and discover more recommendations
         is_home_page = user_context == "music discovery and cross-domain recommendations"
+        
+        # Check cache for home page requests only
+        if is_home_page:
+            # Generate cache key based on user country and location
+            cache_key = f"crossdomain_home_{user_country}_{location}"
+            current_time = time.time()
+            
+            # Check if we have cached data and it's not expired
+            if cache_key in crossdomain_cache:
+                cached_data = crossdomain_cache[cache_key]
+                if current_time - cached_data['timestamp'] < CACHE_EXPIRY:
+                    print(f"[CACHE HIT] Returning cached cross-domain recommendations for home page (age: {int(current_time - cached_data['timestamp'])}s)")
+                    # Mark as from cache
+                    cached_data['data']['from_cache'] = True
+                    cached_data['data']['cache_age_seconds'] = int(current_time - cached_data['timestamp'])
+                    cached_data['data']['cache_expires_in'] = int(CACHE_EXPIRY - (current_time - cached_data['timestamp']))
+                    return jsonify(cached_data['data'])
+                else:
+                    print(f"[CACHE EXPIRED] Removing expired cache entry for key: {cache_key}")
+                    del crossdomain_cache[cache_key]
+            
+            print(f"[CACHE MISS] No valid cache found for home page, generating fresh recommendations")
         
         if is_home_page:
             # Home page: Use broader, more general recommendations
@@ -1131,6 +1392,7 @@ def crossdomain_recommendations_direct():
                 print(f"Domain {domain} tag IDs: {tag_ids}")
                 
                 # Get recommendations for this domain with location support
+                print(f"[CROSSDOMAIN LOCATION] Getting {domain} recommendations with location: {location}, radius: {location_radius}m")
                 domain_recommendations = qloo_service.get_cross_domain_recommendations(
                     tag_ids, domain, max(limit, 10), location, location_radius
                 )
@@ -1161,7 +1423,8 @@ def crossdomain_recommendations_direct():
         print(f"Final response - Domains with data: {domains_with_data}")
         print(f"Total recommendations: {sum(len(recs) for recs in recommendations_by_domain.values())}")
         
-        return jsonify({
+        # Prepare response data
+        response_data = {
             "top_artists": [artist["name"] for artist in top_artists_with_images],
             "top_artists_with_images": top_artists_with_images,
             "recommendations_by_domain": recommendations_by_domain,
@@ -1170,7 +1433,7 @@ def crossdomain_recommendations_direct():
             "recommendation_type": "home_page" if is_home_page else "discover_more",
             "from_cache": False,
             "generated_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "cache_buster": cache_buster,  # Add cache buster to response
+
             "location_used": location if location else "Global",
             "location_radius": location_radius if location else None,
             "user_country": user_country,
@@ -1186,112 +1449,27 @@ def crossdomain_recommendations_direct():
                 "music_based": True,
                 "top_scored_artists_used": len(top_scored_artists),
                 "user_tags_used": len(user_tags),
-                "cache_buster_used": cache_buster,
+
                 "is_home_page": is_home_page,
                 "context_used": context
             }
-        })
+        }
+        
+        # Cache the response for home page requests only
+        if is_home_page:
+            cache_key = f"crossdomain_home_{user_country}_{location}"
+            crossdomain_cache[cache_key] = {
+                'data': response_data,
+                'timestamp': time.time()
+            }
+            print(f"[CACHE STORED] Cached cross-domain recommendations for home page with key: {cache_key}")
+            print(f"[CACHE STORED] Cache will expire in {CACHE_EXPIRY} seconds")
+        
+        return jsonify(response_data)
         
     except Exception as e:
         print(f"Cross-domain recommendations error: {e}")
         return jsonify({"error": "Failed to get cross-domain recommendations"}), 500
-
-@app.route('/test-crossdomain-simple', methods=['POST'])
-def test_crossdomain_simple():
-    """Test endpoint for cross-domain recommendations without Spotify auth"""
-    start_time = time.time()
-    
-    try:
-        data = request.get_json()
-        
-        # Use test data if not provided
-        user_context = data.get("user_context", "romantic evening")
-        music_artists = data.get("music_artists", ["Ed Sheeran", "Adele", "Sam Smith"])
-        user_tags = data.get("user_tags", ["romantic", "emotional", "passionate"])
-        limit = min(int(data.get("limit", 5)), 10)
-        user_country = data.get("user_country", "US")
-        
-        print(f"[TEST] User context: {user_context}")
-        print(f"[TEST] Music artists: {music_artists}")
-        print(f"[TEST] User tags: {user_tags}")
-        
-        # Step 1: Process all domains with enhanced tags
-        domains = ["movie", "tv_show", "podcast", "book", "artist"]
-        domain_mapping = {
-            "movie": "movie",
-            "tv_show": "TV show", 
-            "podcast": "podcast",
-            "book": "book",
-            "artist": "music artist"
-        }
-        recommendations_by_domain = {}
-        
-        for domain in domains:
-            try:
-                # Generate enhanced tags using music recommendation data
-                print(f"\n=== Processing Domain: {domain} ===")
-                domain_tags = gemini_service.generate_music_based_cross_domain_tags(
-                    user_tags, music_artists, user_context, user_country, domain
-                )
-                print(f"Domain {domain} enhanced tags: {domain_tags}")
-                
-                # Get tag IDs for this domain
-                tag_ids = qloo_service.get_tag_ids_fast(domain_tags, domain)
-                print(f"Domain {domain} tag IDs: {tag_ids}")
-                
-                # Get recommendations for this domain
-                domain_recommendations = qloo_service.get_cross_domain_recommendations(
-                    tag_ids, domain, max(limit, 10), None, None
-                )
-                frontend_domain = domain_mapping[domain]
-                recommendations_by_domain[frontend_domain] = domain_recommendations[:max(limit, 10)]
-                print(f"Domain {domain} -> {frontend_domain}: {len(domain_recommendations)} recommendations")
-                
-                # Debug: Show first few recommendations
-                if domain_recommendations:
-                    print(f"Sample recommendations for {domain}:")
-                    for i, rec in enumerate(domain_recommendations[:3]):
-                        print(f"  {i+1}. {rec.get('name', 'Unknown')} (Type: {rec.get('type', 'Unknown')})")
-                else:
-                    print(f"No recommendations found for {domain}")
-                    
-            except Exception as e:
-                print(f"Domain {domain} error: {e}")
-                import traceback
-                traceback.print_exc()
-                frontend_domain = domain_mapping[domain]
-                recommendations_by_domain[frontend_domain] = []
-        
-        response_time = time.time() - start_time
-        
-        # Count domains with recommendations
-        domains_with_data = [domain for domain in domain_mapping.values() if recommendations_by_domain.get(domain)]
-        
-        print(f"Final response - Domains with data: {domains_with_data}")
-        print(f"Total recommendations: {sum(len(recs) for recs in recommendations_by_domain.values())}")
-        
-        return jsonify({
-            "recommendations_by_domain": recommendations_by_domain,
-            "total_domains": len(domains_with_data),
-            "recommendations_per_domain": limit,
-            "from_cache": False,
-            "generated_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "user_context": user_context,
-            "music_artists": music_artists,
-            "user_tags": user_tags,
-            "analysis": {
-                "tags_used": "enhanced_music_based",
-                "user_country": user_country,
-                "response_time": round(response_time, 2),
-                "domains_processed": list(domain_mapping.values()),
-                "music_based": True,
-                "user_tags_used": len(user_tags)
-            }
-        })
-        
-    except Exception as e:
-        print(f"Test cross-domain recommendations error: {e}")
-        return jsonify({"error": "Failed to get test cross-domain recommendations"}), 500
 
 @app.route('/crossdomain-progress/<user_id>', methods=['GET'])
 def crossdomain_progress_direct(user_id):
@@ -1422,25 +1600,131 @@ def test_database_direct():
 
 @app.route('/user-analytics/<user_id>', methods=['GET'])
 def get_user_analytics_direct(user_id):
-    """Get user taste analytics"""
+    """Direct route for user analytics - frontend compatibility"""
     try:
         from services.database import DatabaseService
         db_service = DatabaseService()
         
         analytics = db_service.get_user_taste_analytics(user_id)
-        mood_preferences = db_service.get_user_mood_preferences(user_id)
-        new_artists = db_service.get_new_artists(user_id, 10)
-        
-        return jsonify({
-            "user_id": user_id,
-            "taste_analytics": analytics,
-            "mood_preferences": mood_preferences,
-            "new_artists": new_artists
-        })
-        
+        return jsonify(analytics)
     except Exception as e:
         print(f"User analytics error: {e}")
-        return jsonify({"error": f"Failed to get user analytics: {e}"}), 500
+        return jsonify({"error": "Failed to get user analytics"}), 500
+
+@app.route('/analytics/clear/<user_id>', methods=['POST'])
+def clear_analytics_direct(user_id):
+    """Clear analytics data for a user"""
+    try:
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        db_service.clear_user_analytics(user_id)
+        return jsonify({"status": "success", "message": "Analytics cleared"})
+    except Exception as e:
+        print(f"Analytics clearing error: {e}")
+        return jsonify({"error": "Failed to clear analytics"}), 500
+
+@app.route('/analytics/populate-sample/<user_id>', methods=['POST'])
+def populate_sample_analytics_direct(user_id):
+    """Populate sample analytics data for a user"""
+    try:
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        db_service.populate_sample_analytics(user_id)
+        return jsonify({"status": "success", "message": "Sample analytics populated"})
+    except Exception as e:
+        print(f"Sample analytics population error: {e}")
+        return jsonify({"error": "Failed to populate sample analytics"}), 500
+
+@app.route('/artist-details', methods=['POST'])
+def get_artist_details_direct():
+    """Get detailed artist information from Spotify"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get("spotify_token") or not data.get("artist_name"):
+            return jsonify({"error": "Missing spotify_token or artist_name"}), 400
+        
+        spotify_token = data["spotify_token"]
+        artist_name = data["artist_name"]
+        
+        print(f"Searching for artist: {artist_name}")
+        # First search for the artist to get their ID
+        artist_search = spotify_service.search_artist(spotify_token, artist_name)
+        
+        if not artist_search:
+            print(f"Artist '{artist_name}' not found in Spotify search")
+            return jsonify({"error": f"Artist '{artist_name}' not found"}), 404
+        
+        print(f"Found artist in search: {artist_search.get('name', 'Unknown')} (ID: {artist_search.get('id', 'Unknown')})")
+        # Get detailed artist information
+        artist_details = spotify_service.get_artist_details(spotify_token, artist_search["id"])
+        
+        if not artist_details:
+            return jsonify({"error": "Failed to get artist details"}), 500
+        
+        return jsonify({"artist": artist_details})
+        
+    except Exception as e:
+        print(f"Artist details error: {e}")
+        return jsonify({"error": "Failed to get artist details"}), 500
+
+@app.route('/artist-details-batch', methods=['POST'])
+def get_artist_details_batch_direct():
+    """Get detailed artist information for multiple artists from Spotify"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get("spotify_token") or not data.get("artist_names"):
+            return jsonify({"error": "Missing spotify_token or artist_names"}), 400
+        
+        spotify_token = data["spotify_token"]
+        artist_names = data["artist_names"]
+        
+        if not isinstance(artist_names, list) or len(artist_names) == 0:
+            return jsonify({"error": "artist_names must be a non-empty list"}), 400
+        
+        print(f"Batch searching for {len(artist_names)} artists: {artist_names}")
+        
+        # Limit the number of artists to prevent rate limiting
+        max_artists = 10
+        if len(artist_names) > max_artists:
+            print(f"Limiting batch request to {max_artists} artists to prevent rate limiting")
+            artist_names = artist_names[:max_artists]
+        
+        results = {}
+        
+        for i, artist_name in enumerate(artist_names):
+            # Add delay between requests to prevent rate limiting
+            if i > 0:
+                time.sleep(0.5)  # 500ms delay between requests
+            try:
+                # First search for the artist to get their ID
+                artist_search = spotify_service.search_artist(spotify_token, artist_name)
+                
+                if artist_search:
+                    print(f"Found artist in search: {artist_search.get('name', 'Unknown')} (ID: {artist_search.get('id', 'Unknown')})")
+                    # Get detailed artist information
+                    artist_details = spotify_service.get_artist_details(spotify_token, artist_search["id"])
+                    
+                    if artist_details:
+                        results[artist_name] = {"artist": artist_details}
+                    else:
+                        results[artist_name] = {"error": "Failed to get artist details"}
+                else:
+                    print(f"Artist '{artist_name}' not found in Spotify search")
+                    results[artist_name] = {"error": f"Artist '{artist_name}' not found"}
+                    
+            except Exception as e:
+                print(f"Error processing artist '{artist_name}': {e}")
+                results[artist_name] = {"error": f"Failed to process artist: {str(e)}"}
+        
+        return jsonify({"results": results})
+        
+    except Exception as e:
+        print(f"Batch artist details error: {e}")
+        return jsonify({"error": "Failed to get batch artist details"}), 500
 
 @app.route('/user-history/<user_id>', methods=['GET'])
 def get_user_history_direct(user_id):
@@ -1503,12 +1787,75 @@ def clear_all_history_direct(user_id):
         print(f"Clear history error: {e}")
         return jsonify({"error": f"Failed to clear history: {e}"}), 500
 
+@app.route('/new-artists/<user_id>', methods=['GET'])
+def get_new_artists_direct(user_id):
+    """Get new artists discovered by user in the last 7 days"""
+    try:
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        # Get days parameter from query string, default to 7
+        days = request.args.get('days', 7, type=int)
+        
+        new_artists = db_service.get_new_artists(user_id, days)
+        
+        return jsonify({
+            "user_id": user_id,
+            "new_artists": new_artists,
+            "count": len(new_artists),
+            "days": days
+        })
+        
+    except Exception as e:
+        print(f"New artists error: {e}")
+        return jsonify({"error": f"Failed to get new artists: {e}"}), 500
+
+@app.route('/replay-recommendation/<user_id>/<int:history_id>', methods=['POST'])
+def replay_recommendation_direct(user_id, history_id):
+    """Replay a specific recommendation from history"""
+    try:
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        history_item = db_service.get_history_item(history_id)
+        if not history_item:
+            return jsonify({"error": "History item not found"}), 404
+        
+        # Re-run recommendation with same context
+        data = request.get_json()
+        spotify_token = data.get("spotify_token")
+        
+        if not spotify_token:
+            return jsonify({"error": "Missing spotify_token"}), 400
+        
+        # Use the stored context to generate new recommendations
+        user_context = history_item.get("user_context", "")
+        
+        # Call the music recommendation function with the historical context
+        # For now, just return the historical context for replay
+        return jsonify({
+            "status": "success",
+            "message": "Replay initiated",
+            "user_context": user_context,
+            "history_item": history_item
+        })
+        
+    except Exception as e:
+        print(f"Replay recommendation error: {e}")
+        return jsonify({"error": "Failed to replay recommendation"}), 500
+
 @app.route('/clear-cache', methods=['POST'])
 def clear_cache_direct():
     """Direct route for cache clearing - frontend compatibility"""
     try:
         data = request.get_json()
         user_id = data.get("user_id") if data else None
+        
+        # Clear cross-domain recommendations cache
+        global crossdomain_cache
+        crossdomain_cache_count = len(crossdomain_cache)
+        
+        crossdomain_cache.clear()
         
         if user_id:
             # Clear specific user cache
@@ -1519,7 +1866,13 @@ def clear_cache_direct():
             # Clear all cache
             print("Cleared all cache")
         
-        return jsonify({"status": "success", "message": "Cache cleared"})
+        return jsonify({
+            "status": "success", 
+            "message": "Cache cleared",
+            "crossdomain_cache_entries_cleared": crossdomain_cache_count,
+            "music_tags_cache_entries_cleared": 0,
+            "note": "Music recommendations have no caching enabled"
+        })
         
     except Exception as e:
         print(f"Cache clearing error: {e}")
@@ -1596,6 +1949,47 @@ def health_check():
             "memory_usage": "low",
             "response_time": "fast"
         }
+    })
+
+@app.route('/cache-status', methods=['GET'])
+def cache_status():
+    """Get cache status and statistics"""
+    global crossdomain_cache
+    current_time = time.time()
+    
+    # Calculate crossdomain cache statistics
+    crossdomain_active_entries = 0
+    crossdomain_expired_entries = 0
+    crossdomain_cache_keys = []
+    
+    for key, value in crossdomain_cache.items():
+        if current_time - value['timestamp'] < CACHE_EXPIRY:
+            crossdomain_active_entries += 1
+            crossdomain_cache_keys.append({
+                "key": key,
+                "age_seconds": int(current_time - value['timestamp']),
+                "expires_in_seconds": int(CACHE_EXPIRY - (current_time - value['timestamp']))
+            })
+        else:
+            crossdomain_expired_entries += 1
+    
+    return jsonify({
+        "crossdomain_cache": {
+            "total_entries": len(crossdomain_cache),
+            "active_entries": crossdomain_active_entries,
+            "expired_entries": crossdomain_expired_entries,
+            "cache_expiry_seconds": CACHE_EXPIRY,
+            "cache_keys": crossdomain_cache_keys
+        },
+        "music_tags_cache": {
+            "total_entries": 0,
+            "active_entries": 0,
+            "expired_entries": 0,
+            "cache_expiry_seconds": 0,
+            "cache_keys": [],
+            "status": "DISABLED - No caching for music recommendations"
+        },
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
     })
 
 @app.errorhandler(404)

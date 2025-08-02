@@ -54,7 +54,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:5500/recommendations/history/${userId}?limit=20`);
+      const response = await fetch(`http://localhost:5500/user-history/${userId}?limit=20`);
       if (!response.ok) {
         throw new Error('Failed to load history');
       }
@@ -77,7 +77,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     setLoadingArtists(prev => new Set(prev).add(artistName));
 
     try {
-      const response = await fetch('http://localhost:5500/recommendations/artist-details', {
+      const response = await fetch('http://localhost:5500/artist-details', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -91,20 +91,207 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
       if (response.ok) {
         const data = await response.json();
         console.log(`Artist details received for ${artistName}:`, data.artist);
+        
+        // Ensure we have valid image data
+        const artistData = data.artist;
+        if (artistData && artistData.images && artistData.images.length > 0) {
+          // Use the highest quality image available
+          const bestImage = artistData.images.reduce((best, current) => {
+            return (current.width || 0) > (best.width || 0) ? current : best;
+          });
+          artistData.image = bestImage.url;
+        } else {
+          // Set a placeholder if no image is available
+          artistData.image = null;
+        }
+        
         setArtistDetails(prev => ({
           ...prev,
-          [artistName]: data.artist
+          [artistName]: artistData
         }));
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.warn(`Failed to fetch details for ${artistName}: ${response.status}`, errorData);
+        
+        // Set placeholder data for failed requests
+        setArtistDetails(prev => ({
+          ...prev,
+          [artistName]: {
+            id: '',
+            name: artistName,
+            image: null,
+            genres: [],
+            popularity: 0,
+            followers: 0,
+            spotify_url: '',
+            uri: ''
+          }
+        }));
       }
     } catch (err) {
       console.error(`Failed to fetch details for ${artistName}:`, err);
+      
+      // Set placeholder data for failed requests
+      setArtistDetails(prev => ({
+        ...prev,
+        [artistName]: {
+          id: '',
+          name: artistName,
+          image: null,
+          genres: [],
+          popularity: 0,
+          followers: 0,
+          spotify_url: '',
+          uri: ''
+        }
+      }));
     } finally {
       setLoadingArtists(prev => {
         const newSet = new Set(prev);
         newSet.delete(artistName);
+        return newSet;
+      });
+    }
+  };
+
+  // Batch fetch artist details for better performance
+  const fetchArtistDetailsBatch = async (artistNames: string[]) => {
+    if (!spotifyToken || artistNames.length === 0) return;
+
+    console.log(`Batch fetching details for ${artistNames.length} artists:`, artistNames);
+    
+    // Add all artists to loading state
+    setLoadingArtists(prev => new Set([...prev, ...artistNames]));
+
+    try {
+      // Use the new batch endpoint for better performance
+      const response = await fetch('http://localhost:5500/artist-details-batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          spotify_token: spotifyToken,
+          artist_names: artistNames
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Batch artist details received:`, data.results);
+        
+        // Process all results at once
+        const newDetails = { ...artistDetails };
+        
+        Object.entries(data.results).forEach(([artistName, result]) => {
+          if (result && typeof result === 'object' && 'artist' in result && result.artist) {
+            const artistData = result.artist as any;
+            if (artistData.images && artistData.images.length > 0) {
+              // Use the highest quality image available
+              const bestImage = artistData.images.reduce((best: any, current: any) => {
+                return (current.width || 0) > (best.width || 0) ? current : best;
+              });
+              artistData.image = bestImage.url;
+            } else {
+              // Set a placeholder if no image is available
+              artistData.image = null;
+            }
+            newDetails[artistName] = artistData;
+          } else {
+            // Set placeholder data for failed requests
+            newDetails[artistName] = {
+              id: '',
+              name: artistName,
+              image: null,
+              genres: [],
+              popularity: 0,
+              followers: 0,
+              spotify_url: '',
+              uri: ''
+            };
+          }
+        });
+        
+        // Update state with all results at once
+        setArtistDetails(newDetails);
+      } else {
+        console.error('Batch fetch failed:', response.status);
+        // Fallback to individual requests if batch fails
+        const promises = artistNames.map(async (artistName) => {
+          try {
+            const response = await fetch('http://localhost:5500/artist-details', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                spotify_token: spotifyToken,
+                artist_name: artistName
+              })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const artistData = data.artist;
+              if (artistData && artistData.images && artistData.images.length > 0) {
+                const bestImage = artistData.images.reduce((best, current) => {
+                  return (current.width || 0) > (best.width || 0) ? current : best;
+                });
+                artistData.image = bestImage.url;
+              } else {
+                artistData.image = null;
+              }
+              return { artistName, artistData };
+            } else {
+              return {
+                artistName,
+                artistData: {
+                  id: '',
+                  name: artistName,
+                  image: null,
+                  genres: [],
+                  popularity: 0,
+                  followers: 0,
+                  spotify_url: '',
+                  uri: ''
+                }
+              };
+            }
+          } catch (err) {
+            console.error(`Failed to fetch details for ${artistName}:`, err);
+            return {
+              artistName,
+              artistData: {
+                id: '',
+                name: artistName,
+                image: null,
+                genres: [],
+                popularity: 0,
+                followers: 0,
+                spotify_url: '',
+                uri: ''
+              }
+            };
+          }
+        });
+
+        const results = await Promise.all(promises);
+        setArtistDetails(prev => {
+          const newDetails = { ...prev };
+          results.forEach(({ artistName, artistData }) => {
+            newDetails[artistName] = artistData;
+          });
+          return newDetails;
+        });
+      }
+
+    } catch (err) {
+      console.error('Batch fetch failed:', err);
+    } finally {
+      // Remove all artists from loading state
+      setLoadingArtists(prev => {
+        const newSet = new Set(prev);
+        artistNames.forEach(name => newSet.delete(name));
         return newSet;
       });
     }
@@ -124,7 +311,7 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
     }
 
     try {
-      const response = await fetch(`http://localhost:5500/recommendations/history/${userId}/${historyItem.id}`, {
+      const response = await fetch(`http://localhost:5500/replay-recommendation/${userId}/${historyItem.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -224,9 +411,11 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
         }
       });
 
-      allArtists.forEach(artistName => {
-        fetchArtistDetails(artistName);
-      });
+      // Batch fetch artist details for all unique artists
+      const uniqueArtists = Array.from(allArtists);
+      if (uniqueArtists.length > 0) {
+        fetchArtistDetailsBatch(uniqueArtists);
+      }
     }
   }, [history, spotifyToken, artistDetails]);
 
@@ -413,8 +602,16 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
                                     alt={artistName}
                                     className="w-10 h-10 rounded-full object-cover border-2 border-gray-300 shadow-sm"
                                     onError={(e) => {
+                                      console.log(`Image failed to load for ${artistName}:`, e);
                                       e.currentTarget.style.display = 'none';
-                                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                      // Show placeholder instead
+                                      const placeholder = e.currentTarget.nextElementSibling;
+                                      if (placeholder) {
+                                        placeholder.classList.remove('hidden');
+                                      }
+                                    }}
+                                    onLoad={(e) => {
+                                      console.log(`Image loaded successfully for ${artistName}`);
                                     }}
                                   />
                                 ) : null}
@@ -466,12 +663,18 @@ const RecommendationHistory: React.FC<RecommendationHistoryProps> = ({
                                     </div>
                                   )}
                                   
-                                  {/* Loading State */}
-                                  {isLoading && (
-                                    <div className="text-xs text-gray-400">
-                                      Loading metadata...
-                                    </div>
-                                  )}
+                                                                     {/* Loading State */}
+                                   {isLoading && (
+                                     <div className="space-y-1">
+                                       <div className="text-xs text-gray-400">
+                                         Loading metadata...
+                                       </div>
+                                       <div className="space-y-1">
+                                         <div className="h-1 bg-gray-200 rounded animate-pulse"></div>
+                                         <div className="h-1 bg-gray-200 rounded animate-pulse w-2/3"></div>
+                                       </div>
+                                     </div>
+                                   )}
                                 </div>
                               
                               {/* Arrow Indicator */}

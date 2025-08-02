@@ -134,20 +134,6 @@ class DatabaseService:
         
         return session_id
     
-    def end_user_session(self, session_id: int):
-        """End a user session"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE user_sessions 
-            SET session_end = CURRENT_TIMESTAMP 
-            WHERE id = ?
-        ''', (session_id,))
-        
-        conn.commit()
-        conn.close()
-    
     def store_recommendation_history(self, user_id: str, session_id: int, recommendation_type: str, 
                                    user_context: str, generated_tags: List[str], qloo_artists: List[Dict], 
                                    playlist_data: Dict, response_time: float):
@@ -339,20 +325,6 @@ class DatabaseService:
         conn.close()
         
         return result is None or result[0]
-    
-    def mark_artist_as_new(self, user_id: str, artist_name: str):
-        """Mark an artist as new to the user"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE artist_tracking 
-            SET is_new_artist = FALSE 
-            WHERE user_id = ? AND artist_name = ?
-        ''', (user_id, artist_name))
-        
-        conn.commit()
-        conn.close()
     
     def store_cached_recommendation(self, cache_key: str, user_context: str, user_country: str, 
                                   user_artists: List[str], recommendation_data: Dict, 
