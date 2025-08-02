@@ -9,8 +9,8 @@ class SpotifyService:
     """Optimized Spotify API service with minimal overhead"""
     
     def __init__(self):
-        self.client_id = os.getenv('SPOTIFY_CLIENT_ID', "f4b7a6f6cde94656ad7f0e8f0bfa8330")
-        self.client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', "60cff7a0e84b4e1e94fb97f64d408996")
+        self.client_id = os.getenv('SPOTIFY_CLIENT_ID', "5b5e4ceb834347e6a6c3b998cfaf0088")
+        self.client_secret = os.getenv('SPOTIFY_CLIENT_SECRET', "9c9aadd2b18e49859df887e5e9cc6ede")
         self.base_url = "https://api.spotify.com/v1"
         self.auth_url = "https://accounts.spotify.com/api/token"
         # Simple in-memory cache for artist details to reduce API calls
@@ -175,6 +175,7 @@ class SpotifyService:
                         "name": item.get("name"),
                         "id": item.get("id"),
                         "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
+                        "images": item.get("images", []),  # Include the full images array for frontend processing
                         "genres": item.get("genres", []),
                         "popularity": item.get("popularity", 0),
                         "followers": item.get("followers", {}).get("total", 0) if item.get("followers") else 0
@@ -226,6 +227,7 @@ class SpotifyService:
                         "name": item.get("name"),
                         "id": item.get("id"),
                         "image": item.get("images", [{}])[0].get("url") if item.get("images") else None,
+                        "images": item.get("images", []),  # Include the full images array for frontend processing
                         "genres": item.get("genres", []),
                         "popularity": item.get("popularity", 0)
                     }
@@ -415,6 +417,7 @@ class SpotifyService:
                     # Cache the result
                     self.artist_search_cache[cache_key] = result
                     print(f"Found artist: {artist['name']} (ID: {artist['id']}) on attempt {attempt + 1}")
+                    print(f"Search query was: '{artist_name}', found: '{artist['name']}'")
                     return result
                 else:
                     print(f"No artist found for: {artist_name}")
@@ -475,6 +478,9 @@ class SpotifyService:
                 response.raise_for_status()
                 data = response.json()
                 
+                # Debug: Print the raw response to see what we're getting
+                print(f"Raw Spotify artist data for {data.get('name', 'Unknown')}: {data.get('images', [])}")
+                
                 # Get the best quality image (usually the first one is the highest quality)
                 image_url = None
                 if data.get("images"):
@@ -491,6 +497,7 @@ class SpotifyService:
                     "id": data.get("id"),
                     "name": data.get("name"),
                     "image": image_url,
+                    "images": data.get("images", []),  # Include the full images array for frontend processing
                     "genres": data.get("genres", []),
                     "popularity": data.get("popularity", 0),
                     "followers": data.get("followers", {}).get("total", 0) if data.get("followers") else 0,

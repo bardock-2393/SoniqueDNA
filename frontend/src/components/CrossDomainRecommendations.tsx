@@ -20,10 +20,12 @@ import {
   Globe,
   Award,
   Database,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { ComicText } from './magicui/comic-text';
 import { crossDomainCache, cacheUtils } from '../utils/cacheManager';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface CrossDomainRecommendationsProps {
   userContext: string;
@@ -31,8 +33,8 @@ interface CrossDomainRecommendationsProps {
   topScoredArtists?: string[];
   userTags?: string[];
   spotifyToken: string;
-  location?: string;  // Add location prop
-  locationRadius?: number;  // Add location radius prop
+  location?: string;
+  locationRadius?: number;
   onClose?: () => void;
 }
 
@@ -45,6 +47,7 @@ interface RecommendationItem {
   popularity?: number;
   affinity_score?: number;
   cultural_relevance?: number;
+  relevance_score?: number;
   tags?: string[];
   properties?: {
     // Common fields
@@ -72,6 +75,7 @@ interface RecommendationItem {
     seasons?: number;
     episodes?: number;
     websites?: string[];
+    finale_year?: number;
     
     // Podcast specific
     rating?: string;
@@ -95,7 +99,7 @@ interface RecommendationItem {
     albums?: number;
     spotify_url?: string;
     
-    // Legacy fields (keeping for backward compatibility)
+    // Legacy fields
     runtime?: string;
   };
   
@@ -168,8 +172,7 @@ const generateRequestHash = (
     userTags: userTags.sort(),
     location,
     locationRadius,
-    // Add timestamp for cache busting when force refresh is used
-    timestamp: forceRefresh ? Date.now() : Math.floor(Date.now() / 300000) * 300000 // 5-minute cache window
+    timestamp: forceRefresh ? Date.now() : Math.floor(Date.now() / 300000) * 300000
   };
   
   return btoa(JSON.stringify(data));
@@ -181,35 +184,40 @@ const domainConfig = {
     icon: Film,
     color: 'bg-red-500',
     hoverColor: 'hover:bg-red-600',
-    description: 'Discover films that match your vibe'
+    description: 'Discover films that match your vibe',
+    emoji: '🎬'
   },
   'TV show': {
     title: 'TV Shows',
     icon: Tv,
     color: 'bg-blue-500',
     hoverColor: 'hover:bg-blue-600',
-    description: 'Series that complement your taste'
+    description: 'Series that complement your taste',
+    emoji: '📺'
   },
   podcast: {
     title: 'Podcasts',
     icon: Headphones,
     color: 'bg-purple-500',
     hoverColor: 'hover:bg-purple-600',
-    description: 'Audio content that resonates with you'
+    description: 'Audio content that resonates with you',
+    emoji: '🎧'
   },
   book: {
     title: 'Books',
     icon: BookOpen,
     color: 'bg-green-500',
     hoverColor: 'hover:bg-green-600',
-    description: 'Stories that align with your interests'
+    description: 'Stories that align with your interests',
+    emoji: '📚'
   },
   'music artist': {
     title: 'Music Artists',
     icon: Music,
     color: 'bg-orange-500',
     hoverColor: 'hover:bg-orange-600',
-    description: 'Artists similar to your favorites'
+    description: 'Artists similar to your favorites',
+    emoji: '🎵'
   }
 };
 
@@ -219,18 +227,18 @@ export default function CrossDomainRecommendations({
   topScoredArtists,
   userTags,
   spotifyToken,
-  location = "Mumbai, India",  // Default location for Indian users
-  locationRadius = 50000,  // Default 50km radius
+  location = "Mumbai, India",
+  locationRadius = 50000,
   onClose 
 }: CrossDomainRecommendationsProps) {
   const [recommendations, setRecommendations] = useState<CrossDomainData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [selectedDomain, setSelectedDomain] = useState<string>('');
   const [selectedItem, setSelectedItem] = useState<RecommendationItem | null>(null);
   const [progressInterval, setProgressInterval] = useState<NodeJS.Timeout | null>(null);
   const [cacheStatus, setCacheStatus] = useState<'loading' | 'cached' | 'fresh' | 'error'>('loading');
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     fetchCrossDomainRecommendations();
@@ -244,40 +252,25 @@ export default function CrossDomainRecommendations({
     };
   }, [progressInterval]);
 
-  // Handle keyboard events for popup and prevent body scroll
+  // Handle keyboard events for modal
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && selectedItem) {
+      if (event.key === 'Escape' && detailsOpen) {
+        setDetailsOpen(false);
         setSelectedItem(null);
       }
     };
 
-    if (selectedItem) {
-      // Prevent body scroll when modal is open
-      const originalStyle = window.getComputedStyle(document.body).overflow;
+    if (detailsOpen) {
       document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.top = `-${window.scrollY}px`;
-      
       document.addEventListener('keydown', handleKeyDown);
       
       return () => {
-        document.body.style.overflow = originalStyle;
-        document.body.style.position = '';
-        document.body.style.width = '';
-        document.body.style.top = '';
-        window.scrollTo(0, parseInt(document.body.style.top || '0') * -1);
+        document.body.style.overflow = '';
         document.removeEventListener('keydown', handleKeyDown);
       };
-    } else {
-      // Restore body scroll when modal is closed
-      document.body.style.overflow = 'unset';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.top = '';
     }
-  }, [selectedItem]);
+  }, [detailsOpen]);
 
   const clearServerCache = async () => {
     try {
@@ -298,7 +291,6 @@ export default function CrossDomainRecommendations({
     setProgress(0);
     setCacheStatus('loading');
 
-    // Generate request hash for caching
     const requestHash = generateRequestHash(
       userContext,
       musicArtists,
@@ -309,35 +301,22 @@ export default function CrossDomainRecommendations({
       locationRadius
     );
 
-    // Check cache first (unless forcing refresh)
     if (!forceRefresh) {
       const cachedData = crossDomainCache.getCachedData<CrossDomainData>(CACHE_KEY, requestHash);
       if (cachedData) {
-        // Mark data as from cache
         cachedData.from_cache = true;
         setRecommendations(cachedData);
         setCacheStatus('cached');
         setLoading(false);
-        
-        // Auto-select the first domain that has data
-        const domains = ['movie', 'TV show', 'podcast', 'book', 'music artist'];
-        for (const domain of domains) {
-          if (cachedData.recommendations_by_domain[domain]?.length > 0) {
-            setSelectedDomain(domain);
-            break;
-          }
-        }
         return;
       }
     }
 
-    // Clear cache if forcing refresh
     if (forceRefresh) {
       crossDomainCache.clearCache(CACHE_KEY);
       await clearServerCache();
     }
 
-    // Start progress simulation
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 90) return prev;
@@ -358,10 +337,10 @@ export default function CrossDomainRecommendations({
           music_artists: musicArtists,
           top_scored_artists: topScoredArtists || [],
           user_tags: userTags || [],
-          cache_bust: forceRefresh,  // Add cache busting
-          force_refresh: forceRefresh,  // Add force refresh
-          location: location,  // Use dynamic location from props
-          location_radius: locationRadius  // Use dynamic radius from props
+          cache_bust: forceRefresh,
+          force_refresh: forceRefresh,
+          location: location,
+          location_radius: locationRadius
         }),
       });
 
@@ -383,20 +362,10 @@ export default function CrossDomainRecommendations({
         throw new Error('Invalid JSON response from server');
       }
       
-      // Cache the fresh data
       crossDomainCache.setCachedData(CACHE_KEY, requestHash, data);
       
       setRecommendations(data);
       setCacheStatus('fresh');
-      
-      // Auto-select the first domain that has data
-      const domains = ['movie', 'TV show', 'podcast', 'book', 'music artist'];
-      for (const domain of domains) {
-        if (data.recommendations_by_domain[domain]?.length > 0) {
-          setSelectedDomain(domain);
-          break;
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setCacheStatus('error');
@@ -407,13 +376,6 @@ export default function CrossDomainRecommendations({
         clearInterval(progressInterval);
         setProgressInterval(null);
       }
-    }
-  };
-
-  const handleDomainClick = (domain: string) => {
-    setSelectedDomain(domain);
-    if (!recommendations) {
-      fetchCrossDomainRecommendations();
     }
   };
 
@@ -447,559 +409,126 @@ export default function CrossDomainRecommendations({
     }
   };
 
-  const renderRecommendationCard = (item: RecommendationItem, index: number) => (
-    <Card 
-      key={index} 
-      className="border-2 border-black comic-shadow bg-white hover:shadow-lg transition-all duration-200 cursor-pointer"
-      onClick={() => setSelectedItem(item)}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          {(item.properties?.image?.url || item.image_url) && (
-            <img 
-              src={item.properties?.image?.url || item.image_url} 
-              alt={item.name}
-              className="w-16 h-16 rounded-lg border-2 border-black object-cover"
-              onError={(e) => {
-                console.log(`Image failed to load for ${item.name}:`, e);
-                e.currentTarget.style.display = 'none';
-              }}
-              onLoad={(e) => {
-                console.log(`Image loaded successfully for ${item.name}`);
-              }}
-            />
-          )}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-black text-sm truncate">{item.name}</h3>
-            {(item.properties?.description || item.description) && (
-              <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                {item.properties?.description || item.description}
-              </p>
-            )}
-            
-            {/* Enhanced metadata display */}
-            <div className="space-y-1 mt-2">
-              {(item.properties?.year || item.properties?.release_year || item.properties?.publication_year) && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {item.properties.year || item.properties.release_year || item.properties.publication_year}
-                </p>
-              )}
-              {item.properties?.genre && (
-                <p className="text-xs text-blue-600 font-medium">{item.properties.genre}</p>
-              )}
-              {(item.properties?.genres as string[]) && Array.isArray(item.properties.genres) && item.properties.genres.length > 0 && (
-                <p className="text-xs text-purple-600 font-medium">{item.properties.genres.slice(0, 2).join(', ')}</p>
-              )}
-              {(item.properties?.runtime || item.properties?.duration) && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {item.properties.runtime || item.properties.duration}
-                </p>
-              )}
-              {(item.properties?.episodes || item.properties?.episode_count) && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Tv className="w-3 h-3" />
-                  {(item.properties.episodes || item.properties.episode_count)} episodes
-                </p>
-              )}
-              {item.properties?.page_count && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <BookOpen className="w-3 h-3" />
-                  {item.properties.page_count} pages
-                </p>
-              )}
-              {item.properties?.followers && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  {item.properties.followers.toLocaleString()} followers
-                </p>
-              )}
-              {item.properties?.content_rating && (
-                <p className="text-xs text-orange-600 font-medium">{item.properties.content_rating}</p>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-2 mt-2">
-              {item.affinity_score && (
-                <Badge variant="outline" className="text-xs">
-                  <Star className="w-3 h-3 mr-1" />
-                  {item.affinity_score}
-                </Badge>
-              )}
-              {item.popularity && (
-                <Badge variant="outline" className="text-xs">
-                  <Award className="w-3 h-3 mr-1" />
-                  {item.popularity}
-                </Badge>
-              )}
-              {item.cultural_relevance && (
-                <Badge variant="outline" className="text-xs">
-                  <Globe className="w-3 h-3 mr-1" />
-                  {item.cultural_relevance}
-                </Badge>
-              )}
-            </div>
-            
-            {item.source_artist && (
-              <p className="text-xs text-gray-500 mt-1">
-                Based on: <span className="font-medium">{item.source_artist}</span>
-              </p>
-            )}
-            
-            {/* Quick tags preview */}
-            {item.tags && item.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {item.tags.slice(0, 3).map((tag, tagIndex) => (
-                  <span key={tagIndex} className="text-xs bg-gray-100 text-gray-600 px-1 py-0.5 rounded">
-                    {tag}
-                  </span>
-                ))}
-                {item.tags.length > 3 && (
-                  <span className="text-xs text-gray-400">+{item.tags.length - 3} more</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  const handleItemClick = (item: RecommendationItem) => {
+    setSelectedItem(item);
+    setDetailsOpen(true);
+  };
 
-  const renderDetailedPopup = () => {
-    if (!selectedItem) return null;
-
-    const modalContent = (
+  const renderRecommendationCard = (item: RecommendationItem, domain: string, index: number) => {
+    const config = domainConfig[domain as keyof typeof domainConfig];
+    
+    return (
       <div 
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="detail-title"
-        aria-describedby="detail-description"
-        style={{ 
-          position: 'fixed', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0,
-          overflow: 'hidden',
-          touchAction: 'none'
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            setSelectedItem(null);
-          }
-        }}
-        onTouchMove={(e) => e.preventDefault()}
+        key={index}
+        className="comic-recommendation-card overflow-hidden cursor-pointer group relative flex-shrink-0 w-56 sm:w-60 lg:w-64"
+        onClick={() => handleItemClick(item)}
       >
-        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto border-4 border-black comic-shadow relative z-[10000]">
-          <div className="p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <Button
-                onClick={() => setSelectedItem(null)}
-                variant="outline"
-                className="border-2 border-black"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Discover
-              </Button>
-              <Button
-                onClick={() => setSelectedItem(null)}
-                variant="outline"
-                className="border-2 border-black"
-                aria-label="Close detailed view"
-              >
-                ✕
-              </Button>
+        <div className="relative h-full">
+                     {/* Image Section */}
+           <div className="relative h-36 sm:h-40 lg:h-44 bg-gradient-to-br from-yellow-200 via-orange-200 to-red-200 border-b-4 border-black overflow-hidden">
+             {(item.properties?.image?.url || item.image_url) ? (
+               <img
+                 src={item.properties?.image?.url || item.image_url}
+                 alt={item.name}
+                 className="w-full h-full object-contain bg-white"
+                                   onError={(e) => {
+                    e.currentTarget.src = '/cat/404caty.jpg';
+                  }}
+               />
+             ) : (
+               <div className="w-full h-full flex items-center justify-center">
+                 <span className="text-4xl sm:text-5xl">
+                   {config?.emoji || '🎭'}
+                 </span>
+               </div>
+             )}
+
+            {/* Relevance score badge */}
+            {item.relevance_score !== undefined && item.relevance_score > 0 && (
+              <div className="absolute top-2 left-2 bg-blue-400 border-2 border-black rounded-full px-2 py-1 text-xs font-comic font-black comic-shadow">
+                ⭐ {item.relevance_score.toFixed(1)}
+              </div>
+            )}
+
+            {(item.properties?.release_year || item.properties?.publication_year) && (
+              <div className="absolute top-2 right-2 bg-blue-400 border-2 border-black rounded-full px-2 py-1 text-xs font-comic font-black text-white comic-shadow">
+                {item.properties.release_year || item.properties.publication_year}
+              </div>
+            )}
+
+            <div className="absolute inset-0 bg-yellow-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300 flex items-center justify-center">
+              <span className="text-4xl sm:text-5xl animate-pulse">⭐</span>
+            </div>
+          </div>
+
+          {/* Content Section */}
+          <div className="p-3 sm:p-4 h-28 sm:h-32 lg:h-36 flex flex-col justify-between">
+            <div className="font-comic font-black text-black text-sm sm:text-base leading-tight mb-2 line-clamp-2">
+              {item.name}
             </div>
 
-            {/* Content */}
-            <div className="space-y-4">
-              {/* Image and Title */}
-              <div className="flex items-start gap-4">
-                {(selectedItem.properties?.image?.url || selectedItem.image_url) && (
-                  <img 
-                    src={selectedItem.properties?.image?.url || selectedItem.image_url} 
-                    alt={selectedItem.name}
-                    className="w-24 h-24 rounded-lg border-2 border-black object-cover"
-                    onError={(e) => {
-                      console.log(`Detailed popup image failed to load for ${selectedItem.name}:`, e);
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    onLoad={(e) => {
-                      console.log(`Detailed popup image loaded successfully for ${selectedItem.name}`);
-                    }}
-                  />
-                )}
-                <div className="flex-1">
-                  <h2 id="detail-title" className="text-2xl font-bold text-black mb-2">{selectedItem.name}</h2>
-                  {selectedItem.properties?.description && (
-                    <p id="detail-description" className="text-gray-600 mb-2">{selectedItem.properties.description}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Enhanced Metadata Sections */}
-              <div className="space-y-6">
-                {/* Key Details */}
-                <div className="bg-gray-50 p-4 rounded-lg border-2 border-gray-200">
-                  <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                    <Database className="w-4 h-4" />
-                    Key Details
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {(selectedItem.properties?.year || selectedItem.properties?.release_year || selectedItem.properties?.publication_year) && (
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">Year: {selectedItem.properties.year || selectedItem.properties.release_year || selectedItem.properties.publication_year}</span>
-                      </div>
-                    )}
-                    {selectedItem.properties?.genre && (
-                      <div className="flex items-center gap-2">
-                        <Award className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">Genre: {selectedItem.properties.genre}</span>
-                      </div>
-                    )}
-                    {selectedItem.properties?.content_rating && (
-                      <div className="flex items-center gap-2">
-                        <Award className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">Rating: {selectedItem.properties.content_rating}</span>
-                      </div>
-                    )}
-                    {selectedItem.properties?.language && (
-                      <div className="flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">Language: {selectedItem.properties.language}</span>
-                      </div>
-                    )}
-                    {selectedItem.properties?.format && (
-                      <div className="flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">Format: {selectedItem.properties.format}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Creator Information */}
-                {(selectedItem.properties?.director || selectedItem.properties?.author || selectedItem.properties?.host || selectedItem.properties?.publisher || selectedItem.properties?.channel) && (
-                  <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      Creator Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {selectedItem.properties?.director && (
-                        <div className="flex items-center gap-2">
-                          <Film className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm">Director: {selectedItem.properties.director}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.author && (
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm">Author: {selectedItem.properties.author}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.host && (
-                        <div className="flex items-center gap-2">
-                          <Headphones className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm">Host: {selectedItem.properties.host}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.channel && (
-                        <div className="flex items-center gap-2">
-                          <Headphones className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm">Channel: {selectedItem.properties.channel}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.publisher && (
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-blue-500" />
-                          <span className="text-sm">Publisher: {selectedItem.properties.publisher}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Movie-specific Information */}
-                {selectedItem.properties?.production_companies && selectedItem.properties.production_companies.length > 0 && (
-                  <div className="bg-red-50 p-4 rounded-lg border-2 border-red-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <Film className="w-4 h-4" />
-                      Movie Details
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-2">
-                        <Film className="w-4 h-4 text-red-500 mt-0.5" />
-                        <div>
-                          <span className="text-sm font-medium">Production Companies:</span>
-                          <div className="text-sm text-gray-600 mt-1">
-                            {selectedItem.properties.production_companies.join(', ')}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TV Show-specific Information */}
-                {selectedItem.properties?.websites && selectedItem.properties.websites.length > 0 && (
-                  <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <Tv className="w-4 h-4" />
-                      TV Show Details
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-2">
-                        <ExternalLink className="w-4 h-4 text-blue-500 mt-0.5" />
-                        <div>
-                          <span className="text-sm font-medium">Official Websites:</span>
-                          <div className="text-sm text-gray-600 mt-1">
-                            {selectedItem.properties.websites.map((website, idx) => (
-                              <div key={idx} className="mb-1">
-                                <a 
-                                  href={website} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 underline"
-                                >
-                                  {website}
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-
-
-                {/* Media Details */}
-                {(selectedItem.properties?.runtime || selectedItem.properties?.duration || selectedItem.properties?.episodes || selectedItem.properties?.episode_count || selectedItem.properties?.seasons || selectedItem.properties?.albums || selectedItem.properties?.page_count) && (
-                  <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Media Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {(selectedItem.properties?.runtime || selectedItem.properties?.duration) && (
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-green-500" />
-                          <span className="text-sm">Runtime: {selectedItem.properties.runtime || selectedItem.properties.duration}</span>
-                        </div>
-                      )}
-                      {(selectedItem.properties?.episodes || selectedItem.properties?.episode_count) && (
-                        <div className="flex items-center gap-2">
-                          <Tv className="w-4 h-4 text-green-500" />
-                          <span className="text-sm">Episodes: {selectedItem.properties.episodes || selectedItem.properties.episode_count}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.seasons && (
-                        <div className="flex items-center gap-2">
-                          <Tv className="w-4 h-4 text-green-500" />
-                          <span className="text-sm">Seasons: {selectedItem.properties.seasons}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.albums && (
-                        <div className="flex items-center gap-2">
-                          <Music className="w-4 h-4 text-green-500" />
-                          <span className="text-sm">Albums: {selectedItem.properties.albums}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.page_count && (
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-green-500" />
-                          <span className="text-sm">Pages: {selectedItem.properties.page_count}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Artist/Music Specific */}
-                {(selectedItem.properties?.followers || selectedItem.properties?.genres || selectedItem.properties?.spotify_url) && (
-                  <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <Music className="w-4 h-4" />
-                      Artist Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {selectedItem.properties?.followers && (
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-orange-500" />
-                          <span className="text-sm">Followers: {selectedItem.properties.followers.toLocaleString()}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.genres && Array.isArray(selectedItem.properties.genres) && selectedItem.properties.genres.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Award className="w-4 h-4 text-orange-500" />
-                          <span className="text-sm">Genres: {selectedItem.properties.genres.join(', ')}</span>
-                        </div>
-                      )}
-                      {selectedItem.properties?.spotify_url && (
-                        <div className="flex items-center gap-2">
-                          <Music className="w-4 h-4 text-orange-500" />
-                          <span className="text-sm">Spotify: Available</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ratings & Reviews */}
-                {selectedItem.properties?.rating && (
-                  <div className="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <Star className="w-4 h-4" />
-                      Ratings & Reviews
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4 text-purple-500" />
-                      <span className="text-sm">Rating: {selectedItem.properties.rating}</span>
-                    </div>
-                  </div>
-                )}
-
-
-
-                {/* External URLs */}
-                {(selectedItem.properties?.external_urls || selectedItem.properties?.url || selectedItem.properties?.spotify_url || selectedItem.external) && (
-                  <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
-                    <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                      <ExternalLink className="w-4 h-4" />
-                      External Links
-                    </h3>
-                    <div className="space-y-2">
-                      {selectedItem.properties?.external_urls && Object.entries(selectedItem.properties.external_urls).map(([platform, url]) => (
-                        <div key={platform} className="flex items-center gap-2">
-                          <ExternalLink className="w-4 h-4 text-indigo-500" />
-                          <span className="text-sm capitalize">{platform}:</span>
-                          <a 
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 underline"
-                          >
-                            Visit {platform}
-                          </a>
-                        </div>
-                      ))}
-                      {selectedItem.properties?.url && (
-                        <div className="flex items-center gap-2">
-                          <ExternalLink className="w-4 h-4 text-indigo-500" />
-                          <span className="text-sm">Website:</span>
-                          <a 
-                            href={selectedItem.properties.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 underline"
-                          >
-                            Visit Website
-                          </a>
-                        </div>
-                      )}
-                      {selectedItem.properties?.spotify_url && (
-                        <div className="flex items-center gap-2">
-                          <Music className="w-4 h-4 text-indigo-500" />
-                          <span className="text-sm">Spotify:</span>
-                          <a 
-                            href={selectedItem.properties.spotify_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 underline"
-                          >
-                            Open in Spotify
-                          </a>
-                        </div>
-                      )}
-                      {/* Qloo API External Links */}
-                      {selectedItem.external && Object.entries(selectedItem.external).map(([platform, url]) => (
-                        <div key={platform} className="flex items-center gap-2">
-                          <ExternalLink className="w-4 h-4 text-indigo-500" />
-                          <span className="text-sm capitalize">{platform}:</span>
-                          <a 
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-blue-600 hover:text-blue-800 underline"
-                          >
-                            Visit {platform}
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* User-Friendly Recommendation Info */}
-              <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
-                <h3 className="font-bold text-black mb-3 flex items-center gap-2">
-                  <Star className="w-4 h-4" />
-                  Why This Was Recommended
-                </h3>
-                <div className="space-y-2">
-                  {selectedItem.source_artist && (
-                    <div className="flex items-center gap-2">
-                      <Music className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm">
-                        <span className="font-medium">Recommended because you like:</span> {selectedItem.source_artist}
-                      </span>
-                    </div>
-                  )}
-                  {selectedItem.selected_tag && (
-                    <div className="flex items-center gap-2">
-                      <Award className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm">
-                        <span className="font-medium">Matches your interest in:</span> {selectedItem.selected_tag}
-                      </span>
-                    </div>
-                  )}
-                  {selectedItem.affinity_score && (
-                    <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm">
-                        <span className="font-medium">Match score:</span> {Math.round(selectedItem.affinity_score * 10)}/10
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* External Links */}
-              {(selectedItem.properties?.url || selectedItem.properties?.spotify_url || selectedItem.url) && (
-                <div className="flex gap-2">
-                  {selectedItem.properties?.url && (
-                    <Button asChild className="bg-blue-500 hover:bg-blue-600 text-white font-bold border-2 border-black comic-shadow transition-colors">
-                      <a href={selectedItem.properties.url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Visit Website
-                      </a>
-                    </Button>
-                  )}
-                  {selectedItem.properties?.spotify_url && (
-                    <Button asChild className="bg-green-500 hover:bg-green-600 text-white font-bold border-2 border-black comic-shadow transition-colors">
-                      <a href={selectedItem.properties.spotify_url} target="_blank" rel="noopener noreferrer">
-                        <Music className="w-4 h-4 mr-2" />
-                        Open in Spotify
-                      </a>
-                    </Button>
-                  )}
+            <div className="flex-1 flex flex-col justify-center gap-2">
+              {item.selected_tag && (
+                <div className="bg-purple-300 border-2 border-black rounded-lg px-2 py-1 text-xs font-comic font-black text-center comic-shadow">
+                  #{item.selected_tag}
                 </div>
               )}
+
+              {item.source_artist && (
+                <div className="text-xs text-gray-700 flex items-center justify-center gap-1 font-comic font-bold">
+                  <span>🎵</span>
+                  <span className="truncate">From: {item.source_artist}</span>
+                </div>
+              )}
+
+                             {/* Domain-specific info */}
+               <div className="text-xs text-gray-700 flex items-center justify-center gap-1 font-comic font-bold">
+                 {domain === 'movie' && item.properties?.duration && (
+                   <>
+                     <span>⏰</span>
+                     <span>{(() => {
+                       const duration = typeof item.properties.duration === 'string' ? parseInt(item.properties.duration) : item.properties.duration;
+                       if (isNaN(duration)) return item.properties.duration;
+                       return `${Math.floor(duration / 60)}h ${duration % 60}m`;
+                     })()}</span>
+                   </>
+                 )}
+                {domain === 'book' && item.properties?.page_count && (
+                  <>
+                    <span>📖</span>
+                    <span>{item.properties.page_count} pages</span>
+                  </>
+                )}
+                {domain === 'TV show' && (item.properties?.release_year && item.properties?.finale_year) && (
+                  <>
+                    <span>📅</span>
+                    <span>{item.properties.release_year} - {item.properties.finale_year}</span>
+                  </>
+                )}
+                {domain === 'podcast' && item.properties?.episode_count && (
+                  <>
+                    <span>🎙️</span>
+                    <span>{item.properties.episode_count} eps</span>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Bottom action */}
+            <div className="mt-2 text-center">
+              <div className="bg-yellow-300 border-2 border-black rounded-full px-3 py-1 text-xs font-comic font-black comic-shadow group-hover:bg-yellow-400 transition-colors">
+                CLICK TO EXPLORE!
+              </div>
+            </div>
+          </div>
+
+          {/* Hover effect */}
+          <div className="absolute -top-2 -left-2 bg-white border-3 border-black rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 comic-shadow transform group-hover:scale-110">
+            <span className="text-lg">💥</span>
           </div>
         </div>
       </div>
     );
-
-    // Use portal to render modal at the top level
-    return createPortal(modalContent, document.body);
   };
 
   return (
@@ -1036,7 +565,7 @@ export default function CrossDomainRecommendations({
           {/* Refresh Button */}
           <Button 
             onClick={() => fetchCrossDomainRecommendations(true)}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg border-2 border-black comic-shadow flex items-center gap-2 transition-colors"
+            className="comic-button bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg border-2 border-black comic-shadow flex items-center gap-2 transition-colors"
             disabled={loading}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -1051,7 +580,7 @@ export default function CrossDomainRecommendations({
               fetchCrossDomainRecommendations();
             }}
             variant="outline"
-            className="border-2 border-black comic-shadow text-sm"
+            className="comic-button border-2 border-black comic-shadow text-sm"
             disabled={loading}
           >
             Clear Local Cache
@@ -1062,24 +591,51 @@ export default function CrossDomainRecommendations({
       {/* Loading State */}
       {loading && (
         <div className="text-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p className="text-sm text-gray-600 font-comic">
-            Discovering amazing content for you...
-          </p>
-          <Progress value={progress} className="w-full max-w-md mx-auto mt-4" />
-          <p className="text-xs text-gray-500 mt-2">{Math.round(progress)}%</p>
+          <div className="comic-recommendation-card mb-6">
+            <div className="flex items-center gap-4 mb-4">
+              <img src="/cat/404caty.jpg" alt="Loading Cat" className="w-12 h-12 rounded-full comic-border animate-pulse" />
+              <div>
+                <span className="font-bold text-black font-comic text-lg">Caty is thinking...</span>
+                <div className="text-gray-600 text-sm font-comic mt-1">
+                  😼 "Hold on, human! I'm analyzing your music taste to find movies, books, and shows you'll love..."
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-bold text-black font-comic text-lg">
+                  {progress > 100 ? '102.475135245687%' : `${progress}%`}
+                </span>
+                {progress > 100 && (
+                  <div className="text-xs text-red-500 font-comic">(Caty's math skills! 😸)</div>
+                )}
+              </div>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="mb-4">
+              <div className="w-full bg-gray-200 rounded-full h-3 sm:h-4 border-2 border-black comic-shadow overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 transition-all duration-500 ease-out"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+            </div>
+            
+            <p className="text-sm text-gray-600 font-comic">
+              Discovering amazing content for you...
+            </p>
+          </div>
         </div>
       )}
 
       {/* Error State */}
       {error && (
         <div className="text-center py-8">
-          <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4 max-w-md mx-auto">
+          <div className="comic-recommendation-card bg-red-50 border-2 border-red-500 rounded-lg p-4 max-w-md mx-auto">
             <p className="text-red-700 font-bold text-sm">{error}</p>
             <div className="flex flex-col sm:flex-row gap-2 mt-3 justify-center">
               <Button 
                 onClick={() => fetchCrossDomainRecommendations()}
-                className="bg-red-500 hover:bg-red-600 text-white font-bold border-2 border-black comic-shadow transition-colors"
+                className="comic-button bg-red-500 hover:bg-red-600 text-white font-bold border-2 border-black comic-shadow transition-colors"
               >
                 Try Again
               </Button>
@@ -1090,7 +646,7 @@ export default function CrossDomainRecommendations({
                   fetchCrossDomainRecommendations();
                 }}
                 variant="outline"
-                className="border-2 border-black"
+                className="comic-button border-2 border-black"
               >
                 Clear Cache & Retry
               </Button>
@@ -1102,8 +658,6 @@ export default function CrossDomainRecommendations({
       {/* Recommendations Display */}
       {recommendations && !loading && !error && (
         <div className="space-y-8">
-
-
           {/* Show all domains with data */}
           {Object.entries(domainConfig).map(([domain, config]) => {
             const domainRecommendations = recommendations.recommendations_by_domain[domain as keyof typeof recommendations.recommendations_by_domain];
@@ -1118,22 +672,38 @@ export default function CrossDomainRecommendations({
               <div key={domain} className="space-y-4">
                 {/* Domain Header */}
                 <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <IconComponent className="w-6 h-6" />
-                    <h2 className="text-xl font-bold text-black font-comic">
-                      {config.title}
-                    </h2>
+                  <div className="comic-section-header max-w-2xl mx-auto">
+                    <div className="flex items-center justify-center gap-3 sm:gap-4">
+                      <img src="/cat/404caty.jpg" alt={`Cat ${domain}`} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full comic-border comic-shadow" />
+                      <div className="text-center">
+                        <ComicText fontSize={1.8} className="uppercase tracking-wider text-sm sm:text-base">
+                          {config.title}
+                        </ComicText>
+                        <div className="font-comic font-bold text-sm sm:text-base lg:text-lg text-black mt-1">
+                          😼 Caty's Picks!
+                        </div>
+                      </div>
+                      <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 bg-white comic-border rounded-full w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center font-comic font-black text-sm sm:text-lg comic-shadow">
+                        {domainRecommendations.length}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-600 font-comic">
-                    {config.description}
-                  </p>
                 </div>
 
                 {/* Recommendations Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {domainRecommendations.map((item, index) => 
-                    renderRecommendationCard(item, index)
+                    renderRecommendationCard(item, domain, index)
                   )}
+                </div>
+
+                {/* Section Divider */}
+                <div className="mt-6 sm:mt-8 lg:mt-12 flex items-center justify-center">
+                  <div className="bg-gradient-to-r from-transparent via-black to-transparent h-1 sm:h-2 w-full max-w-md comic-shadow"></div>
+                  <div className="mx-3 sm:mx-4 bg-yellow-400 comic-border rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center font-comic font-black comic-shadow-lg comic-pulse">
+                    ⭐
+                  </div>
+                  <div className="bg-gradient-to-r from-black via-transparent to-transparent h-1 sm:h-2 w-full max-w-md comic-shadow"></div>
                 </div>
               </div>
             );
@@ -1149,7 +719,7 @@ export default function CrossDomainRecommendations({
             if (!hasAnyRecommendations) {
               return (
                 <div className="text-center py-8">
-                  <div className="bg-yellow-50 border-2 border-yellow-500 rounded-lg p-6 max-w-md mx-auto">
+                  <div className="comic-recommendation-card bg-yellow-50 border-2 border-yellow-500 rounded-lg p-6 max-w-md mx-auto">
                     <p className="text-yellow-700 font-bold text-lg mb-2">No Recommendations Found</p>
                     <p className="text-yellow-600 text-sm mb-4">
                       We couldn't find any cross-domain recommendations for your current taste profile.
@@ -1157,7 +727,7 @@ export default function CrossDomainRecommendations({
                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
                       <Button 
                         onClick={() => fetchCrossDomainRecommendations(true)}
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                        className="comic-button bg-yellow-500 hover:bg-yellow-600 text-white"
                       >
                         Try Again with Fresh Data
                       </Button>
@@ -1167,7 +737,7 @@ export default function CrossDomainRecommendations({
                           fetchCrossDomainRecommendations();
                         }}
                         variant="outline"
-                        className="border-2 border-black"
+                        className="comic-button border-2 border-black"
                       >
                         Clear Cache & Retry
                       </Button>
@@ -1178,8 +748,6 @@ export default function CrossDomainRecommendations({
             }
             return null;
           })()}
-
-
         </div>
       )}
 
@@ -1189,15 +757,144 @@ export default function CrossDomainRecommendations({
           <Button 
             onClick={onClose}
             variant="outline"
-            className="border-2 border-black comic-shadow"
+            className="comic-button border-2 border-black comic-shadow"
           >
             Close
           </Button>
         </div>
       )}
 
-      {/* Detailed Popup */}
-      {renderDetailedPopup()}
+      {/* Details Modal */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent 
+          className="bg-white border-4 border-black comic-shadow max-w-2xl mx-auto p-0 max-h-[90vh] flex flex-col"
+          aria-describedby="details-description"
+        >
+          {selectedItem && (
+            <>
+              {/* Fixed Header */}
+              <div className="p-4 sm:p-6 border-b-2 border-black bg-yellow-50">
+                <p id="details-description" className="sr-only">
+                  Detailed information about {selectedItem.name}
+                </p>
+                                 <div className="flex items-center gap-4">
+                   {(selectedItem.properties?.image?.url || selectedItem.image_url) ? (
+                     <img
+                       src={selectedItem.properties?.image?.url || selectedItem.image_url}
+                       alt={selectedItem.name}
+                       className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-black object-cover flex-shrink-0"
+                                               onError={e => { 
+                          e.currentTarget.src = '/cat/404caty.jpg'; 
+                        }}
+                     />
+                   ) : (
+                     <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-yellow-200 to-orange-300 rounded-lg border-2 border-black flex items-center justify-center flex-shrink-0">
+                       <span className="text-2xl sm:text-3xl">🎭</span>
+                     </div>
+                   )}
+                  <div className="flex-1 min-w-0">
+                    <ComicText fontSize={1.3} className="mb-2 line-clamp-2">{selectedItem.name}</ComicText>
+                    <div className="flex flex-wrap gap-2">
+                      {(selectedItem.properties?.release_year || selectedItem.properties?.publication_year) && (
+                        <div className="text-xs bg-gray-100 border border-black rounded px-2 py-1 font-bold font-comic">
+                          {selectedItem.properties.release_year || selectedItem.properties.publication_year}
+                        </div>
+                      )}
+                      {selectedItem.relevance_score !== undefined && selectedItem.relevance_score > 0 && (
+                        <div className="text-xs bg-blue-100 border border-black rounded px-2 py-1 font-bold font-comic">
+                          ⭐ {selectedItem.relevance_score.toFixed(1)} relevance
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+                {/* Selected Tag and Source Artist */}
+                <div className="flex flex-wrap gap-2">
+                  {selectedItem.selected_tag && (
+                    <Badge className="text-xs bg-blue-100 text-blue-800 border border-blue-300 font-comic">
+                      #{selectedItem.selected_tag}
+                    </Badge>
+                  )}
+                  {selectedItem.source_artist && (
+                    <div className="text-xs text-gray-500 flex items-center gap-1 font-comic bg-gray-50 border border-gray-300 rounded px-2 py-1">
+                      <span>🎵</span>
+                      <span>Based on: {selectedItem.source_artist}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                {(selectedItem.properties?.description || selectedItem.properties?.short_description || selectedItem.description) && (
+                  <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-3">
+                    <h4 className="font-comic font-bold text-sm mb-2 text-black">Description</h4>
+                    <div
+                      className="text-sm text-gray-700 font-comic leading-relaxed"
+                      dangerouslySetInnerHTML={{
+                        __html: (selectedItem.properties?.description || selectedItem.properties?.short_description || selectedItem.description || '').replace(/\n/g, '<br />')
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Tags */}
+                {selectedItem.tags && selectedItem.tags.length > 0 && (
+                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3">
+                    <h4 className="font-comic font-bold text-sm mb-2 text-black">Tags</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedItem.tags.slice(0, 8).map((tag: any, index: number) => (
+                        <Badge key={index} className="bg-yellow-100 border border-black text-black text-xs font-bold font-comic">
+                          {typeof tag === 'string' ? tag : tag.name || tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* External Links */}
+                {(selectedItem.properties?.url || selectedItem.properties?.spotify_url || selectedItem.url) && (
+                  <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg p-3">
+                    <h4 className="font-comic font-bold text-sm mb-2 text-black">External Links</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedItem.properties?.url && (
+                        <Button asChild className="bg-blue-500 hover:bg-blue-600 text-white font-bold border-2 border-black comic-shadow transition-colors">
+                          <a href={selectedItem.properties.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Visit Website
+                          </a>
+                        </Button>
+                      )}
+                      {selectedItem.properties?.spotify_url && (
+                        <Button asChild className="bg-green-500 hover:bg-green-600 text-white font-bold border-2 border-black comic-shadow transition-colors">
+                          <a href={selectedItem.properties.spotify_url} target="_blank" rel="noopener noreferrer">
+                            <Music className="w-4 h-4 mr-2" />
+                            Open in Spotify
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Fixed Footer */}
+              <div className="border-t-2 border-black p-4 bg-gray-50">
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => setDetailsOpen(false)}
+                    className="comic-button bg-yellow-200 hover:bg-yellow-300 text-black font-bold border-2 border-black font-comic comic-shadow"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 
