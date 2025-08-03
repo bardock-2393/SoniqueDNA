@@ -101,7 +101,6 @@ def music_recommendation():
         attempt = 0
         
         while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
-        while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
             attempt += 1
             print(f"[QLOO ATTEMPT {attempt}] Trying to get 5 accepted tags...")
             
@@ -114,8 +113,6 @@ def music_recommendation():
             
             print(f"[QLOO ATTEMPT {attempt}] Got {len(tag_ids)} accepted tags so far")
             
-            # If we have 3 or more tags, we're done (no limit)
-            if len(tag_ids) >= 3:
             # If we have 3 or more tags, we're done (no limit)
             if len(tag_ids) >= 3:
                 print(f"[SUCCESS] Got {len(tag_ids)} accepted tags after {attempt} attempts")
