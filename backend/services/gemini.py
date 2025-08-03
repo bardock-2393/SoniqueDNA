@@ -29,12 +29,21 @@ class GeminiService:
         """Fast context analysis - single Gemini call with focused prompt"""
         prompt = f"""
         Analyze this user context and return ONLY a JSON object with these exact fields:
-        - primary_mood: string (happy, sad, energetic, calm, romantic, etc.)
-        - activity_type: string (workout, study, party, relaxation, etc.)
+        - primary_mood: string (happy, sad, melancholic, depressed, blue, energetic, calm, romantic, angry, anxious, nostalgic, etc.)
+        - activity_type: string (workout, study, party, relaxation, introspection, social, travel, etc.)
         - energy_level: string (high, medium, low)
         - confidence: float (0.0 to 1.0)
 
-        User context: {user_context}
+        IMPORTANT: Pay special attention to emotional expressions:
+        - "feeling blue" = sad/melancholic mood
+        - "feeling down" = sad/depressed mood  
+        - "feeling happy" = happy/upbeat mood
+        - "feeling energetic" = high energy
+        - "feeling tired" = low energy
+        - "feeling romantic" = romantic mood
+        - "feeling nostalgic" = nostalgic mood
+
+        User context: "{user_context}"
 
         Return only the JSON object, no other text.
         """
@@ -87,11 +96,14 @@ class GeminiService:
             "energy": ["high_energy", "low_energy", "moderate", "intense", "gentle", "powerful"]
         }
         
-        # Analyze user's cultural context from artists
-        cultural_context = self._analyze_cultural_context_from_artists(user_artists, user_country)
+        # Generate comprehensive cultural context using Gemini
+        cultural_context = self.generate_cultural_context(user_country, user_artists=user_artists)
         
         # Debug logging
         print(f"[CULTURAL DEBUG] User Country: {user_country}, Cultural Context: {cultural_context}, Artists: {user_artists}")
+        
+        # Get Qloo artist tags from cultural context
+        qloo_artist_tags = cultural_context.get("qloo_artist_tags", [])
         
         # Generate Qloo-optimized prompt
         model = self.models["tag_generation"]
@@ -103,6 +115,7 @@ class GeminiService:
         Context: {context}
         User Country: {user_country or 'Global'}
         Cultural Context: {cultural_context}
+        Qloo Artist Tags: {qloo_artist_tags}
         
         IMPORTANT QLOO REQUIREMENTS:
         1. Use ONLY tags that exist in Qloo's database
@@ -125,6 +138,7 @@ class GeminiService:
         - Choose the tag that best represents the user's current taste and context
         
         CULTURAL INTELLIGENCE:
+        - Use the provided Qloo Artist Tags: {qloo_artist_tags}
         - If user listens to Hindi artists: include "indian", "cultural", "bollywood"
         - If user listens to K-pop: include "asian", "korean", "pop"
         - If user listens to Latin music: include "latin", "spanish", "cultural"
@@ -158,165 +172,9 @@ class GeminiService:
         print(f"[FALLBACK DEBUG] Using fallback tags: {fallback_tags}")
         return fallback_tags
 
-    def generate_domain_specific_tags(self, domain: str, context: str = "") -> List[str]:
-        """Generate domain-specific tags that are proven to work with Qloo"""
-        
-        # Domain-specific tag mappings based on Qloo's database
-        domain_tags = {
-            "movie": {
-                "romantic": ["romantic", "drama", "love", "passionate", "emotional"],
-                "action": ["thriller", "adventure", "action", "exciting", "energetic"],
-                "comedy": ["comedy", "funny", "humorous", "lighthearted", "upbeat"],
-                "drama": ["drama", "emotional", "serious", "intense", "powerful"],
-                "mystery": ["mystery", "thriller", "suspense", "intriguing", "dark"],
-                "family": ["family", "heartwarming", "feel-good", "wholesome", "uplifting"]
-            },
-            "tv_show": {
-                "romantic": ["romantic", "drama", "love", "passionate", "emotional"],
-                "action": ["thriller", "adventure", "action", "exciting", "energetic"],
-                "comedy": ["comedy", "funny", "humorous", "lighthearted", "upbeat"],
-                "drama": ["drama", "emotional", "serious", "intense", "powerful"],
-                "mystery": ["mystery", "thriller", "suspense", "intriguing", "dark"],
-                "reality": ["reality", "drama", "entertaining", "popular", "trending"]
-            },
-            "podcast": {
-                "educational": ["educational", "informative", "knowledge", "learning", "insightful"],
-                "comedy": ["comedy", "funny", "humorous", "entertaining", "lighthearted"],
-                "news": ["news", "current_events", "politics", "informative", "serious"],
-                "business": ["business", "entrepreneurship", "success", "motivational", "professional"],
-                "health": ["health", "wellness", "fitness", "lifestyle", "self_improvement"],
-                "true_crime": ["true_crime", "mystery", "thriller", "suspense", "dark"]
-            },
-            "book": {
-                "romance": ["romance", "romantic", "love", "passionate", "emotional"],
-                "mystery": ["mystery", "thriller", "suspense", "detective", "crime"],
-                "fantasy": ["fantasy", "adventure", "magical", "epic", "imaginative"],
-                "self_help": ["self_help", "motivational", "inspirational", "personal_growth", "success"],
-                "biography": ["biography", "memoir", "inspirational", "real_life", "success"],
-                "fiction": ["fiction", "drama", "emotional", "compelling", "engaging"]
-            },
-            "artist": {
-                "pop": ["pop", "mainstream", "popular", "upbeat", "catchy"],
-                "rock": ["rock", "energetic", "powerful", "guitar", "band"],
-                "hip_hop": ["hip_hop", "rap", "urban", "rhythm", "beats"],
-                "electronic": ["electronic", "dance", "techno", "synth", "beats"],
-                "jazz": ["jazz", "smooth", "sophisticated", "instrumental", "classy"],
-                "classical": ["classical", "orchestral", "sophisticated", "elegant", "timeless"]
-            }
-        }
-        
-        # Get tags for the specific domain
-        if domain in domain_tags:
-            # Enhanced context analysis with randomization
-            context_lower = context.lower()
-            available_categories = list(domain_tags[domain].keys())
-            
-            # Try to match context to specific categories
-            matched_category = None
-            
-            if any(word in context_lower for word in ['romantic', 'love', 'passionate', 'emotional']):
-                matched_category = "romantic" if "romantic" in available_categories else None
-            elif any(word in context_lower for word in ['action', 'thriller', 'exciting', 'energetic']):
-                matched_category = "action" if "action" in available_categories else None
-            elif any(word in context_lower for word in ['comedy', 'funny', 'humorous', 'lighthearted']):
-                matched_category = "comedy" if "comedy" in available_categories else None
-            elif any(word in context_lower for word in ['mystery', 'suspense', 'dark', 'thriller']):
-                matched_category = "mystery" if "mystery" in available_categories else None
-            elif any(word in context_lower for word in ['family', 'wholesome', 'uplifting']):
-                matched_category = "family" if "family" in available_categories else None
-            elif any(word in context_lower for word in ['educational', 'learning', 'knowledge']):
-                matched_category = "educational" if "educational" in available_categories else None
-            elif any(word in context_lower for word in ['business', 'professional', 'success']):
-                matched_category = "business" if "business" in available_categories else None
-            elif any(word in context_lower for word in ['health', 'wellness', 'fitness']):
-                matched_category = "health" if "health" in available_categories else None
-            elif any(word in context_lower for word in ['pop', 'mainstream', 'popular']):
-                matched_category = "pop" if "pop" in available_categories else None
-            elif any(word in context_lower for word in ['rock', 'energetic', 'powerful']):
-                matched_category = "rock" if "rock" in available_categories else None
-            elif any(word in context_lower for word in ['hip_hop', 'rap', 'urban']):
-                matched_category = "hip_hop" if "hip_hop" in available_categories else None
-            elif any(word in context_lower for word in ['electronic', 'dance', 'techno']):
-                matched_category = "electronic" if "electronic" in available_categories else None
-            elif any(word in context_lower for word in ['jazz', 'smooth', 'sophisticated']):
-                matched_category = "jazz" if "jazz" in available_categories else None
-            elif any(word in context_lower for word in ['classical', 'orchestral', 'elegant']):
-                matched_category = "classical" if "classical" in available_categories else None
-            
-            # If no specific match, use randomization to avoid always returning the same category
-            if matched_category is None:
-                import random
-                # Use timestamp-based randomization to ensure variety across requests
-                random.seed(int(time.time() * 1000) % 10000)  # Use milliseconds for more variety
-                matched_category = random.choice(available_categories)
-            
-            return domain_tags[domain][matched_category][:5]  # Return exactly 5 tags
-        
-        # Fallback to general tags with randomization
-        import random
-        fallback_tags = ["drama", "romantic", "adventure", "comedy", "mystery", "thriller", "action", "emotional"]
-        random.shuffle(fallback_tags)
-        return fallback_tags[:5]
+
     
-    def generate_genre_based_tags(self, artist_genres: List[str], context: str = "", user_country: str = None, domain: str = "artist") -> List[str]:
-        """Generate domain-specific tags based on artist genres - limit to 5 most relevant"""
-        
-        # Extract unique genres from user's artists
-        unique_genres = list(set(artist_genres))
-        print(f"Extracted genres from user artists: {unique_genres}")
-        
-        # Simple, proven working tags for each domain
-        proven_working_tags = {
-            "movie": ["drama", "romantic", "action", "comedy", "family"],
-            "tv_show": ["drama", "romantic", "comedy", "family", "reality"],
-            "podcast": ["entertainment", "interviews", "music", "cultural", "lifestyle"],
-            "book": ["romance", "drama", "fiction", "cultural", "contemporary"],
-            "artist": ["pop", "mainstream", "indian", "cultural", "contemporary"]
-        }
-        
-        # Get the proven tags for this domain
-        domain_tags = proven_working_tags.get(domain, ["drama", "romantic", "cultural"])
-        
-        # Add some context-based tags
-        context_tags = []
-        if "romantic" in context.lower() or "love" in context.lower():
-            context_tags.extend(["romantic", "drama"])
-        if "action" in context.lower() or "energetic" in context.lower():
-            context_tags.extend(["action", "adventure"])
-        if "cultural" in context.lower() or "traditional" in context.lower():
-            context_tags.extend(["cultural", "traditional"])
-        
-        # Add cultural tags based on user country
-        cultural_tags = []
-        if user_country and ("india" in user_country.lower() or "indian" in user_country.lower()):
-            cultural_tags.extend(["indian", "south asian"])
-        elif user_country and ("american" in user_country.lower() or "usa" in user_country.lower()):
-            cultural_tags.extend(["american", "western"])
-        
-        # Combine all tags and remove duplicates
-        all_tags = domain_tags + context_tags + cultural_tags
-        unique_tags = list(dict.fromkeys(all_tags))  # Preserve order while removing duplicates
-        
-        # Limit to 5 tags
-        final_tags = unique_tags[:5]
-        
-        print(f"Domain {domain} - Selected {len(final_tags)} most relevant tags: {final_tags}")
-        return final_tags
-        proven_working_tags = {
-            "movie": ["drama", "romantic", "action", "comedy", "family"],
-            "tv_show": ["drama", "romantic", "comedy", "family", "reality"],
-            "podcast": ["entertainment", "interviews", "music", "cultural", "lifestyle"],
-            "book": ["romance", "drama", "fiction", "cultural", "contemporary"],
-            "artist": ["pop", "mainstream", "indian", "cultural", "contemporary"]
-        }
-        
-        # If we have less than 3 tags, use proven working tags
-        if len(unique_search_terms) < 3:
-            unique_search_terms = proven_working_tags.get(domain, ["drama", "romantic", "cultural", "entertainment", "contemporary"])
-        
-        print(f"Domain {domain} - Selected 5 most relevant tags: {unique_search_terms}")
-        
-        return unique_search_terms
+
     
     def analyze_artist_context(self, artist_name: str, context: str) -> Dict:
         """Analyze artist in context - single focused call"""
@@ -354,74 +212,348 @@ class GeminiService:
             "relevance_score": 0.5
         }
     
-    def generate_cultural_context(self, user_country: str, location: str = None) -> Dict:
-        """Generate cultural context for recommendations"""
+    def generate_cultural_context(self, user_country: str, location: str = None, user_artists: List[str] = None) -> Dict:
+        """Generate cultural context for recommendations using Gemini AI"""
         try:
             # Debug: Print country detection in cultural context
             print(f"[CULTURAL DEBUG] Generating cultural context for country: {user_country}")
             
-            # Simple cultural context based on country and location
-            cultural_context = {
-                "region": "global",
-                "language_preference": "any",
-                "cultural_elements": [],
-                "popular_genres": []
-            }
+            # Handle user_artists - extract names if they're dictionaries
+            artist_names = []
+            if user_artists:
+                for artist in user_artists:
+                    if isinstance(artist, dict):
+                        # Extract name from dictionary
+                        artist_name = artist.get('name', str(artist))
+                        artist_names.append(artist_name)
+                    elif isinstance(artist, str):
+                        artist_names.append(artist)
+                    else:
+                        artist_names.append(str(artist))
             
-            if user_country == "IN":
-                cultural_context.update({
-                    "region": "south_asia",
-                    "language_preference": "hindi",
-                    "cultural_elements": ["bollywood", "indian", "desi", "hindi", "punjabi", "bhangra", "cultural", "romantic", "drama"],
-                    "popular_genres": ["bollywood", "hindi_pop", "punjabi", "bhangra", "romantic", "drama"]
-                })
-            elif user_country in ["US", "CA", "GB", "AU"]:
-                cultural_context.update({
-                    "region": "western",
-                    "language_preference": "english",
-                    "cultural_elements": ["western", "pop", "rock", "hip_hop", "electronic", "cultural", "romantic", "drama"],
-                    "popular_genres": ["pop", "rock", "hip_hop", "electronic", "romantic", "drama"]
-                })
-            elif user_country in ["JP", "KR"]:
-                cultural_context.update({
-                    "region": "east_asia",
-                    "language_preference": "local",
-                    "cultural_elements": ["k_pop", "j_pop", "anime", "cultural", "romantic", "drama"],
-                    "popular_genres": ["k_pop", "j_pop", "anime", "j_rock", "romantic", "drama"]
-                })
+            # Create a comprehensive prompt for Gemini to analyze cultural context
+            prompt = f"""
+            Analyze the cultural context for music recommendations based on:
+            - User country: {user_country}
+            - Location: {location or 'Not specified'}
+            - User artists: {', '.join(artist_names) if artist_names else 'Not specified'}
             
-            if location:
-                cultural_context["location"] = location
+            Generate a JSON object with these exact fields:
+            - region: string (south_asia, east_asia, western, latin_america, africa, middle_east, europe, global)
+            - language_preference: string (hindi, english, korean, japanese, spanish, portuguese, arabic, french, german, any)
+            - cultural_elements: array of strings (cultural tags that work with Qloo API)
+            - popular_genres: array of strings (music genres popular in this region)
+            - qloo_artist_tags: array of strings (Qloo-compatible tags for artist recommendations)
+            - cultural_significance: float (0.0 to 1.0, how culturally specific this context is)
+            
+            IMPORTANT QLOO TAG REQUIREMENTS:
+            - Use only tags that exist in Qloo's database
+            - For artists, focus on: pop, rock, hip_hop, electronic, jazz, classical, country, folk, indie, alternative, r&b, soul, funk, reggae, latin, k-pop, j-pop, bollywood, hindi, punjabi, bhangra, mainstream, contemporary, traditional, experimental
+            - Cultural tags should be: indian, western, asian, latin, african, middle_eastern, european, korean, japanese, desi, hispanic, arabic, turkish, persian
+            - Mood tags should be: romantic, drama, comedy, thriller, emotional, upbeat, calm, energetic, sad, happy, nostalgic, passionate, introspective
+            
+            EXAMPLES:
+            - India (IN): {{"region": "south_asia", "language_preference": "hindi", "cultural_elements": ["bollywood", "indian", "desi", "hindi", "punjabi", "bhangra"], "popular_genres": ["bollywood", "hindi_pop", "punjabi", "bhangra"], "qloo_artist_tags": ["bollywood", "indian", "hindi", "punjabi", "cultural", "romantic", "drama", "mainstream"], "cultural_significance": 0.9}}
+            - USA (US): {{"region": "western", "language_preference": "english", "cultural_elements": ["western", "pop", "rock", "hip_hop"], "popular_genres": ["pop", "rock", "hip_hop", "electronic"], "qloo_artist_tags": ["pop", "rock", "hip_hop", "mainstream", "contemporary", "western", "romantic", "drama"], "cultural_significance": 0.7}}
+            - Korea (KR): {{"region": "east_asia", "language_preference": "korean", "cultural_elements": ["k_pop", "korean", "asian"], "popular_genres": ["k_pop", "j_pop", "anime", "j_rock"], "qloo_artist_tags": ["k_pop", "j_pop", "asian", "pop", "mainstream", "contemporary", "romantic", "drama"], "cultural_significance": 0.8}}
+            
+            Return only the JSON object, no other text.
+            """
+            
+            # Use Gemini to generate cultural context
+            print(f"[CULTURAL DEBUG] Calling Gemini API for cultural context...")
+            response = self._call_gemini(prompt)
+            if response:
+                print(f"[CULTURAL DEBUG] Gemini response received: {response[:200]}...")
+                try:
+                    # Extract JSON from response
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start != -1 and json_end != 0:
+                        json_str = response[json_start:json_end]
+                        cultural_context = json.loads(json_str)
+                        
+                        # Validate and enhance the response
+                        cultural_context = self._validate_cultural_context(cultural_context, user_country, location, user_artists)
+                        
+                        # Debug: Print final cultural context
+                        print(f"[CULTURAL DEBUG] Gemini-generated cultural context: {cultural_context}")
+                        
+                        return cultural_context
+                        
+                except json.JSONDecodeError as e:
+                    print(f"[CULTURAL DEBUG] JSON parsing error: {e}")
+                    print(f"[CULTURAL DEBUG] Raw response: {response}")
+                    pass
             else:
-                # Add default location based on country for better cultural context
-                if user_country == "IN":
-                    cultural_context["location"] = "Mumbai"
-                elif user_country == "US":
-                    cultural_context["location"] = "New York"
-                elif user_country == "GB":
-                    cultural_context["location"] = "London"
-                elif user_country == "CA":
-                    cultural_context["location"] = "Toronto"
-                elif user_country == "AU":
-                    cultural_context["location"] = "Sydney"
-                elif user_country == "JP":
-                    cultural_context["location"] = "Tokyo"
-                elif user_country == "KR":
-                    cultural_context["location"] = "Seoul"
-            
-            # Debug: Print final cultural context
-            print(f"[CULTURAL DEBUG] Final cultural context: {cultural_context}")
-            
-            return cultural_context
+                print(f"[CULTURAL DEBUG] No response from Gemini API")
             
         except Exception as e:
-            print(f"Error generating cultural context: {e}")
-            return {
-                "region": "global",
-                "language_preference": "any",
-                "cultural_elements": [],
-                "popular_genres": []
-            }
+            print(f"Error generating cultural context with Gemini: {e}")
+        
+        # Fallback to enhanced hardcoded context with Qloo artist tags
+        return self._generate_fallback_cultural_context(user_country, location, user_artists)
+    
+    def _validate_cultural_context(self, cultural_context: Dict, user_country: str, location: str, user_artists: List[str]) -> Dict:
+        """Validate and enhance the Gemini-generated cultural context"""
+        
+        # Ensure all required fields exist
+        required_fields = ["region", "language_preference", "cultural_elements", "popular_genres", "qloo_artist_tags", "cultural_significance"]
+        for field in required_fields:
+            if field not in cultural_context:
+                cultural_context[field] = self._get_default_cultural_field(field, user_country)
+        
+        # Validate qloo_artist_tags - ensure they're Qloo-compatible
+        qloo_artist_tags = cultural_context.get("qloo_artist_tags", [])
+        validated_tags = self._validate_qloo_artist_tags(qloo_artist_tags)
+        cultural_context["qloo_artist_tags"] = validated_tags
+        
+        # Add location if provided
+        if location:
+            cultural_context["location"] = location
+        else:
+            # Add default location based on country
+            cultural_context["location"] = self._get_default_location(user_country)
+        
+        # Add artist analysis if available
+        if user_artists:
+            artist_cultural_analysis = self._analyze_artists_cultural_context(user_artists)
+            cultural_context["artist_cultural_analysis"] = artist_cultural_analysis
+        
+        return cultural_context
+    
+    def _validate_qloo_artist_tags(self, tags: List[str]) -> List[str]:
+        """Validate tags to ensure they're compatible with Qloo's artist tag database"""
+        
+        # Qloo-proven artist tags that work across all regions
+        qloo_proven_artist_tags = [
+            # Genres
+            "pop", "rock", "hip_hop", "electronic", "jazz", "classical", "country", "folk", "indie", "alternative", "r&b", "soul", "funk", "reggae", "latin", "k_pop", "j_pop", "bollywood", "hindi", "punjabi", "bhangra",
+            # Cultural
+            "indian", "western", "asian", "latin", "african", "middle_eastern", "european", "korean", "japanese", "desi", "hispanic", "arabic", "turkish", "persian",
+            # Mood/Style
+            "romantic", "drama", "comedy", "thriller", "emotional", "upbeat", "calm", "energetic", "sad", "happy", "nostalgic", "passionate", "introspective",
+            # Other
+            "mainstream", "contemporary", "traditional", "experimental", "cultural"
+        ]
+        
+        validated_tags = []
+        for tag in tags:
+            tag_lower = tag.lower()
+            # Check if tag is in proven list
+            if tag_lower in [t.lower() for t in qloo_proven_artist_tags]:
+                validated_tags.append(tag)
+            else:
+                # Try to find closest match
+                closest_tag = self._find_closest_qloo_tag(tag_lower, qloo_proven_artist_tags)
+                if closest_tag:
+                    validated_tags.append(closest_tag)
+        
+        # Ensure we have at least some tags
+        if not validated_tags:
+            validated_tags = ["mainstream", "pop", "contemporary", "romantic", "drama"]
+        
+        return validated_tags[:8]  # Limit to 8 tags
+    
+    def _find_closest_qloo_tag(self, tag: str, proven_tags: List[str]) -> str:
+        """Find the closest proven Qloo tag using simple string matching"""
+        if not proven_tags:
+            return ""
+        
+        best_match = ""
+        best_score = 0
+        
+        for proven_tag in proven_tags:
+            proven_lower = proven_tag.lower()
+            
+            # Exact match
+            if tag == proven_lower:
+                return proven_tag
+            
+            # Contains match
+            if tag in proven_lower or proven_lower in tag:
+                score = len(set(tag) & set(proven_lower)) / len(set(tag) | set(proven_lower))
+                if score > best_score:
+                    best_score = score
+                    best_match = proven_tag
+        
+        # Return best match if similarity is above threshold
+        if best_score > 0.3:
+            return best_match
+        
+        return ""
+    
+    def _analyze_artists_cultural_context(self, user_artists: List[str]) -> Dict:
+        """Analyze cultural context from user's favorite artists"""
+        if not user_artists:
+            return {"detected_culture": "global", "confidence": 0.0}
+        
+        # Handle user_artists - extract names if they're dictionaries
+        artist_names = []
+        for artist in user_artists:
+            if isinstance(artist, dict):
+                # Extract name from dictionary
+                artist_name = artist.get('name', str(artist))
+                artist_names.append(artist_name)
+            elif isinstance(artist, str):
+                artist_names.append(artist)
+            else:
+                artist_names.append(str(artist))
+        
+        # Cultural keywords for different regions
+        cultural_keywords = {
+            "indian": ["arjit", "pritam", "shreya", "atif", "neha", "badshah", "karan", "amit", "vishal", "shankar", "bollywood", "hindi", "punjabi", "bhangra", "ghazal", "qawwali"],
+            "korean": ["bts", "blackpink", "exo", "twice", "red velvet", "k-pop", "korean", "seoul"],
+            "japanese": ["j-pop", "j-rock", "anime", "japanese", "tokyo", "akb48", "babymetal"],
+            "latin": ["bad bunny", "j balvin", "maluma", "shakira", "reggaeton", "latin", "spanish", "mexican", "colombian", "puerto rican"],
+            "african": ["afrobeats", "nigerian", "ghanaian", "south african", "african", "wizkid", "burna boy", "davido"],
+            "middle_eastern": ["arabic", "turkish", "persian", "middle eastern", "egyptian", "lebanese"],
+            "western": ["ed sheeran", "taylor swift", "the weeknd", "dua lipa", "post malone", "ariana grande", "british", "american", "canadian", "australian"]
+        }
+        
+        # Count cultural matches
+        cultural_counts = {}
+        artist_names_lower = [artist.lower() for artist in artist_names]
+        
+        for culture, keywords in cultural_keywords.items():
+            count = 0
+            for artist in artist_names_lower:
+                for keyword in keywords:
+                    if keyword in artist:
+                        count += 1
+                        break
+            cultural_counts[culture] = count
+        
+        # Find the most common culture
+        if cultural_counts:
+            max_culture = max(cultural_counts, key=cultural_counts.get)
+            if cultural_counts[max_culture] > 0:
+                confidence = min(cultural_counts[max_culture] / len(artist_names), 1.0)
+                return {"detected_culture": max_culture, "confidence": confidence}
+        
+        return {"detected_culture": "global", "confidence": 0.0}
+    
+    def _get_default_cultural_field(self, field: str, user_country: str) -> any:
+        """Get default values for cultural context fields"""
+        defaults = {
+            "region": "global",
+            "language_preference": "any",
+            "cultural_elements": [],
+            "popular_genres": [],
+            "qloo_artist_tags": ["mainstream", "pop", "contemporary", "romantic", "drama"],
+            "cultural_significance": 0.5
+        }
+        
+        # Override based on country
+        if user_country == "IN":
+            defaults.update({
+                "region": "south_asia",
+                "language_preference": "hindi",
+                "cultural_elements": ["bollywood", "indian", "desi", "hindi", "punjabi", "bhangra"],
+                "popular_genres": ["bollywood", "hindi_pop", "punjabi", "bhangra"],
+                "qloo_artist_tags": ["bollywood", "indian", "hindi", "punjabi", "cultural", "romantic", "drama", "mainstream"],
+                "cultural_significance": 0.9
+            })
+        elif user_country in ["US", "CA", "GB", "AU"]:
+            defaults.update({
+                "region": "western",
+                "language_preference": "english",
+                "cultural_elements": ["western", "pop", "rock", "hip_hop", "electronic"],
+                "popular_genres": ["pop", "rock", "hip_hop", "electronic"],
+                "qloo_artist_tags": ["pop", "rock", "hip_hop", "mainstream", "contemporary", "western", "romantic", "drama"],
+                "cultural_significance": 0.7
+            })
+        elif user_country in ["JP", "KR"]:
+            defaults.update({
+                "region": "east_asia",
+                "language_preference": "local",
+                "cultural_elements": ["k_pop", "j_pop", "anime", "asian"],
+                "popular_genres": ["k_pop", "j_pop", "anime", "j_rock"],
+                "qloo_artist_tags": ["k_pop", "j_pop", "asian", "pop", "mainstream", "contemporary", "romantic", "drama"],
+                "cultural_significance": 0.8
+            })
+        
+        return defaults.get(field, defaults["region"])
+    
+    def _get_default_location(self, user_country: str) -> str:
+        """Get default location based on country"""
+        location_map = {
+            "IN": "Mumbai",
+            "US": "New York",
+            "GB": "London",
+            "CA": "Toronto",
+            "AU": "Sydney",
+            "JP": "Tokyo",
+            "KR": "Seoul",
+            "MX": "Mexico City",
+            "BR": "São Paulo",
+            "AR": "Buenos Aires",
+            "CO": "Bogotá",
+            "NG": "Lagos",
+            "GH": "Accra",
+            "ZA": "Johannesburg",
+            "EG": "Cairo",
+            "TR": "Istanbul",
+            "IR": "Tehran"
+        }
+        return location_map.get(user_country, "Global")
+    
+    def _generate_fallback_cultural_context(self, user_country: str, location: str, user_artists: List[str]) -> Dict:
+        """Generate fallback cultural context when Gemini fails"""
+        print(f"[CULTURAL DEBUG] Using fallback cultural context for country: {user_country}")
+        
+        # Start with default context
+        cultural_context = {
+            "region": "global",
+            "language_preference": "any",
+            "cultural_elements": [],
+            "popular_genres": [],
+            "qloo_artist_tags": ["mainstream", "pop", "contemporary", "romantic", "drama"],
+            "cultural_significance": 0.5
+        }
+        
+        # Enhance based on country
+        if user_country == "IN":
+            cultural_context.update({
+                "region": "south_asia",
+                "language_preference": "hindi",
+                "cultural_elements": ["bollywood", "indian", "desi", "hindi", "punjabi", "bhangra", "cultural", "romantic", "drama"],
+                "popular_genres": ["bollywood", "hindi_pop", "punjabi", "bhangra", "romantic", "drama"],
+                "qloo_artist_tags": ["bollywood", "indian", "hindi", "punjabi", "cultural", "romantic", "drama", "mainstream"],
+                "cultural_significance": 0.9
+            })
+        elif user_country in ["US", "CA", "GB", "AU"]:
+            cultural_context.update({
+                "region": "western",
+                "language_preference": "english",
+                "cultural_elements": ["western", "pop", "rock", "hip_hop", "electronic", "cultural", "romantic", "drama"],
+                "popular_genres": ["pop", "rock", "hip_hop", "electronic", "romantic", "drama"],
+                "qloo_artist_tags": ["pop", "rock", "hip_hop", "mainstream", "contemporary", "western", "romantic", "drama"],
+                "cultural_significance": 0.7
+            })
+        elif user_country in ["JP", "KR"]:
+            cultural_context.update({
+                "region": "east_asia",
+                "language_preference": "local",
+                "cultural_elements": ["k_pop", "j_pop", "anime", "cultural", "romantic", "drama"],
+                "popular_genres": ["k_pop", "j_pop", "anime", "j_rock", "romantic", "drama"],
+                "qloo_artist_tags": ["k_pop", "j_pop", "asian", "pop", "mainstream", "contemporary", "romantic", "drama"],
+                "cultural_significance": 0.8
+            })
+        
+        # Add location
+        if location:
+            cultural_context["location"] = location
+        else:
+            cultural_context["location"] = self._get_default_location(user_country)
+        
+        # Add artist analysis if available
+        if user_artists:
+            artist_cultural_analysis = self._analyze_artists_cultural_context(user_artists)
+            cultural_context["artist_cultural_analysis"] = artist_cultural_analysis
+        
+        print(f"[CULTURAL DEBUG] Fallback cultural context: {cultural_context}")
+        return cultural_context
     
     def enhance_context_detection(self, user_context: str, user_country: str) -> Dict:
         """Enhanced context detection with mood and language preference"""
@@ -473,11 +605,11 @@ class GeminiService:
                 }
             }
     
-    def generate_enhanced_tags(self, user_context: str, user_country: str, location: str = None) -> List[str]:
+    def generate_enhanced_tags(self, user_context: str, user_country: str, location: str = None, user_artists: List[str] = None) -> List[str]:
         """Generate enhanced tags using Gemini with cultural context"""
         try:
             # Create enhanced prompt with cultural context
-            cultural_context = self.generate_cultural_context(user_country, location)
+            cultural_context = self.generate_cultural_context(user_country, location, user_artists)
             
             prompt = f"""
             Based on this user context: "{user_context}"
@@ -504,7 +636,7 @@ class GeminiService:
             print(f"Error generating enhanced tags: {e}")
         
         # Fallback to simple tags
-        return self.generate_optimized_tags(user_context, user_country)
+        return self.generate_optimized_tags(user_context, user_country, user_artists)
     
     def generate_music_based_cross_domain_tags(self, user_tags: List[str], artists: List[str], user_context: str, user_country: str, domain: str) -> List[str]:
         """Generate cross-domain tags based on music recommendation data"""
@@ -513,7 +645,7 @@ class GeminiService:
             print(f"[COUNTRY DEBUG] Cross-domain tags - User Country: {user_country}, Domain: {domain}")
             
             # Create enhanced prompt for cross-domain recommendations
-            cultural_context = self.generate_cultural_context(user_country)
+            cultural_context = self.generate_cultural_context(user_country, user_artists=artists)
             
             # Debug: Print cultural context
             print(f"[CULTURAL DEBUG] Cross-domain - Cultural Context: {cultural_context}")
@@ -669,86 +801,9 @@ class GeminiService:
         if len(fallback_tags) < 5:
             fallback_tags.extend(random.sample(tag_pool, 5 - len(fallback_tags)))
         
-        return fallback_tags[:5]
+        return fallback_tags
     
-    def filter_and_rank_tags_for_music(self, tags: List[str], user_context: str, user_country: str, location: str = None) -> List[str]:
-        """Filter and rank tags for music recommendations - MUSIC ONLY with Qloo integration"""
-        try:
-            if not tags:
-                return []
-            
-            # Debug: Print country detection
-            print(f"[COUNTRY DEBUG] Music tags - User Country: {user_country}")
-            
-            # Generate cultural context for better Qloo integration
-            cultural_context = self.generate_cultural_context(user_country)
-            
-            # Debug: Print cultural context
-            print(f"[CULTURAL DEBUG] Music - Cultural Context: {cultural_context}")
-            
-            # First, filter out non-music tags
-            music_only_tags = []
-            non_music_tags = ['drama', 'family', 'cultural', 'emotional', 'romantic', 'action', 'comedy', 'thriller', 'horror', 'documentary']
-            
-            for tag in tags:
-                tag_lower = tag.lower()
-                # Skip media/non-music tags
-                if tag_lower in non_music_tags:
-                    continue
-                # Include music-related tags
-                if any(music_word in tag_lower for music_word in ['pop', 'rock', 'hip', 'rap', 'electronic', 'jazz', 'classical', 'country', 'folk', 'indie', 'alternative', 'r&b', 'soul', 'funk', 'reggae', 'latin', 'k-pop', 'j-pop', 'bollywood', 'hindi', 'punjabi', 'bhangra', 'energetic', 'upbeat', 'dance', 'party', 'chill', 'relax', 'energetic', 'happy', 'sad', 'romantic', 'nostalgic']):
-                    music_only_tags.append(tag)
-            
-            # If we have music tags, use them
-            if music_only_tags:
-                tags_to_filter = music_only_tags
-            else:
-                # Generate music-specific tags if none found
-                music_only_tags = self.generate_music_specific_tags(user_context, user_country)
-                tags_to_filter = music_only_tags
-            
-            # Create enhanced prompt for music-specific tag filtering with Qloo integration
-            prompt = f"""
-            Based on this music recommendation data:
-            - User context: "{user_context}"
-            - User country: {user_country}
-            - Cultural context: {cultural_context}
-            - Location: {location if location else 'Global'}
-            
-            From this list of MUSIC tags: {', '.join(tags_to_filter)}
-            
-            Select the 5 most relevant tags for Qloo music recommendations that match the user's taste.
-            Consider:
-            1. Music genre relevance (pop, rock, hip-hop, electronic, etc.)
-            2. Musical mood/energy (upbeat, chill, energetic, romantic, etc.)
-            3. Cultural music styles (bollywood, k-pop, latin, etc.)
-            4. Popularity in the region
-            5. Qloo's proven tag database compatibility
-            
-            IMPORTANT: Only select MUSIC-related tags (genres, moods, styles).
-            DO NOT select media tags like drama, family, cultural, etc.
-            
-            Return only the 5 selected MUSIC tags as a comma-separated list, no explanations.
-            """
-            
-            response = self._call_gemini(prompt)
-            if response:
-                # Parse filtered tags
-                filtered_tags = [tag.strip() for tag in response.split(",") if tag.strip()]
-                # Double-check: filter out any non-music tags that might have slipped through
-                final_tags = []
-                for tag in filtered_tags:
-                    tag_lower = tag.lower()
-                    if tag_lower not in non_music_tags and any(music_word in tag_lower for music_word in ['pop', 'rock', 'hip', 'rap', 'electronic', 'jazz', 'classical', 'country', 'folk', 'indie', 'alternative', 'r&b', 'soul', 'funk', 'reggae', 'latin', 'k-pop', 'j-pop', 'bollywood', 'hindi', 'punjabi', 'bhangra', 'energetic', 'upbeat', 'dance', 'party', 'chill', 'relax', 'energetic', 'happy', 'sad', 'romantic', 'nostalgic']):
-                        final_tags.append(tag)
-                
-                return final_tags[:5]  # Ensure max 5 tags
-            
-        except Exception as e:
-            print(f"Error filtering music tags: {e}")
-        
-        # Fallback: return music-specific tags
-        return self._generate_music_specific_fallback_tags(user_context, user_country)
+
     
     def generate_music_specific_tags(self, user_context: str, user_country: str) -> List[str]:
         """Generate music-specific tags using Gemini with Qloo integration"""
@@ -757,7 +812,7 @@ class GeminiService:
             print(f"[COUNTRY DEBUG] Generate music tags - User Country: {user_country}")
             
             # Generate cultural context for better Qloo integration
-            cultural_context = self.generate_cultural_context(user_country)
+            cultural_context = self.generate_cultural_context(user_country, user_artists=None)
             
             # Debug: Print cultural context
             print(f"[CULTURAL DEBUG] Generate music tags - Cultural Context: {cultural_context}")
@@ -795,7 +850,7 @@ class GeminiService:
                     if tag_lower not in non_music_tags and any(music_word in tag_lower for music_word in ['pop', 'rock', 'hip', 'rap', 'electronic', 'jazz', 'classical', 'country', 'folk', 'indie', 'alternative', 'r&b', 'soul', 'funk', 'reggae', 'latin', 'k-pop', 'j-pop', 'bollywood', 'hindi', 'punjabi', 'bhangra', 'energetic', 'upbeat', 'dance', 'party', 'chill', 'relax', 'energetic', 'happy', 'sad', 'romantic', 'nostalgic']):
                         music_tags.append(tag)
                 
-                return music_tags[:5]  # Ensure max 5 tags
+                return music_tags  # No limit
             
         except Exception as e:
             print(f"Error generating music-specific tags: {e}")
@@ -837,75 +892,13 @@ class GeminiService:
             
             # Return unique tags, max 5
             unique_tags = list(dict.fromkeys(base_tags))  # Preserve order while removing duplicates
-            return unique_tags[:5]
+            return unique_tags
             
         except Exception as e:
             print(f"Error generating music-specific fallback tags: {e}")
             return ['pop', 'upbeat', 'mainstream', 'energetic', 'contemporary']
     
-    def ai_sort_by_relevance(self, entities: List[Dict], user_artists: List[Dict], 
-                           user_genres: List[List[str]], context_type: str, user_country: str, 
-                           location: str = None, user_preferences: Dict = None, user_context: str = None) -> List[Dict]:
-        """AI-powered sorting of entities by relevance to user preferences"""
-        if not entities:
-            return []
-        
-        try:
-            # Prepare user artist names for context
-            user_artist_names = [artist.get('name', '') for artist in user_artists if artist.get('name')]
-            user_genre_names = []
-            for genre_list in user_genres:
-                user_genre_names.extend(genre_list)
-            
-            # Create prompt for AI sorting
-            prompt = f"""
-            Sort these {len(entities)} entities by relevance to a user with these preferences:
-            
-            User Artists: {', '.join(user_artist_names[:5])}
-            User Genres: {', '.join(user_genre_names[:5])}
-            User Country: {user_country}
-            Context: {context_type}
-            User Context: {user_context or 'general'}
-            
-            Entities to sort:
-            {[entity.get('name', 'Unknown') for entity in entities[:10]]}
-            
-            Return ONLY a JSON array with the entity names in order of relevance (most relevant first).
-            Example: ["Entity 1", "Entity 2", "Entity 3"]
-            """
-            
-            response = self._call_gemini(prompt)
-            if response:
-                try:
-                    # Extract JSON from response
-                    import json
-                    json_start = response.find('[')
-                    json_end = response.rfind(']') + 1
-                    if json_start != -1 and json_end != 0:
-                        sorted_names = json.loads(response[json_start:json_end])
-                        
-                        # Reorder entities based on AI sorting
-                        sorted_entities = []
-                        for name in sorted_names:
-                            for entity in entities:
-                                if entity.get('name', '').lower() == name.lower():
-                                    sorted_entities.append(entity)
-                                    break
-                        
-                        # Add any remaining entities that weren't in the AI response
-                        for entity in entities:
-                            if entity not in sorted_entities:
-                                sorted_entities.append(entity)
-                        
-                        return sorted_entities
-                except Exception as e:
-                    print(f"Error parsing AI sorting response: {e}")
-            
-        except Exception as e:
-            print(f"Error in AI sorting: {e}")
-        
-        # Fallback: return original order
-        return entities
+
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
         """Call Gemini API with error handling"""
@@ -940,6 +933,10 @@ class GeminiService:
                     content = result["candidates"][0]["content"]
                     if "parts" in content and len(content["parts"]) > 0:
                         return content["parts"][0]["text"]
+                else:
+                    print(f"[GEMINI DEBUG] No candidates in response: {result}")
+            else:
+                print(f"[GEMINI DEBUG] API error {response.status_code}: {response.text}")
             
             return None
             
@@ -980,6 +977,10 @@ class GeminiService:
                     content = result["candidates"][0]["content"]
                     if "parts" in content and len(content["parts"]) > 0:
                         return content["parts"][0]["text"]
+                else:
+                    print(f"[GEMINI ENHANCED DEBUG] No candidates in response: {result}")
+            else:
+                print(f"[GEMINI ENHANCED DEBUG] API error {response.status_code}: {response.text}")
             
             return None
             
@@ -991,6 +992,18 @@ class GeminiService:
         """Analyze cultural context from user's favorite artists"""
         if not user_artists:
             return "global"
+        
+        # Handle user_artists - extract names if they're dictionaries
+        artist_names = []
+        for artist in user_artists:
+            if isinstance(artist, dict):
+                # Extract name from dictionary
+                artist_name = artist.get('name', str(artist))
+                artist_names.append(artist_name)
+            elif isinstance(artist, str):
+                artist_names.append(artist)
+            else:
+                artist_names.append(str(artist))
         
         # Cultural keywords for different regions
         cultural_keywords = {
@@ -1005,7 +1018,7 @@ class GeminiService:
         
         # Count cultural matches
         cultural_counts = {}
-        artist_names_lower = [artist.lower() for artist in user_artists]
+        artist_names_lower = [artist.lower() for artist in artist_names]
         
         for culture, keywords in cultural_keywords.items():
             count = 0
@@ -1041,8 +1054,7 @@ class GeminiService:
                 "IR": "middle_eastern",
                 "US": "western",
                 "GB": "western",
-                "CA": "western",
-                "AU": "western"
+                "CA": "western"
             }
             return country_culture_map.get(user_country, "global")
         
@@ -1070,7 +1082,7 @@ class GeminiService:
             if closest_tag:
                 validated_tags.append(closest_tag)
         
-        return validated_tags[:8]  # Limit to 8 tags
+        return validated_tags  # No limit
 
     def _find_closest_proven_tag(self, tag: str, proven_tags: List[str]) -> str:
         """Find the closest proven tag using simple string matching"""
@@ -1101,36 +1113,40 @@ class GeminiService:
         
         return ""
 
-    def _generate_qloo_fallback_tags(self, context: str, user_country: str, cultural_context: str, qloo_proven_tags: Dict) -> List[str]:
-        """Generate fallback tags when AI generation fails"""
+    def _generate_qloo_fallback_tags(self, context: str, user_country: str, cultural_context: Dict, qloo_proven_tags: Dict) -> List[str]:
+        """Generate fallback tags when AI generation fails - FIXED to use cultural context"""
         fallback_tags = []
         
-        # Add cultural context tags
-        if cultural_context != "global":
-            cultural_tags = qloo_proven_tags.get("cultural", [])
-            fallback_tags.extend(cultural_tags[:2])
+        # Use Qloo artist tags from cultural context if available
+        if isinstance(cultural_context, dict) and "qloo_artist_tags" in cultural_context:
+            qloo_artist_tags = cultural_context.get("qloo_artist_tags", [])
+            if qloo_artist_tags:
+                fallback_tags.extend(qloo_artist_tags[:4])  # Use up to 4 Qloo artist tags
+                print(f"[CULTURAL FALLBACK] Using Qloo artist tags: {qloo_artist_tags[:4]}")
+        
+        # Use cultural context if available (backward compatibility)
+        elif isinstance(cultural_context, str) and cultural_context != "global" and user_country == "IN":
+            # Use Indian/Bollywood specific tags
+            fallback_tags.extend(["bollywood", "indian", "hindi", "punjabi"])
+            print(f"[CULTURAL FALLBACK] Using Indian cultural tags: {fallback_tags}")
+        
+        # Add music-specific tags that work with Qloo
+        music_tags = ["mainstream", "pop", "hip_hop", "electronic", "rock"]
+        fallback_tags.extend(music_tags)
         
         # Add mood tags based on context
         context_lower = context.lower()
         if any(word in context_lower for word in ["happy", "upbeat", "energetic", "party"]):
-            mood_tags = qloo_proven_tags.get("mood", [])
-            fallback_tags.extend([tag for tag in mood_tags if "happy" in tag.lower() or "energetic" in tag.lower()][:2])
+            fallback_tags.extend(["energetic", "upbeat"])
         elif any(word in context_lower for word in ["sad", "melancholic", "emotional"]):
-            mood_tags = qloo_proven_tags.get("mood", [])
-            fallback_tags.extend([tag for tag in mood_tags if "emotional" in tag.lower() or "drama" in tag.lower()][:2])
+            fallback_tags.extend(["emotional", "drama"])
         elif any(word in context_lower for word in ["romantic", "love", "passionate"]):
-            mood_tags = qloo_proven_tags.get("mood", [])
-            fallback_tags.extend([tag for tag in mood_tags if "romantic" in tag.lower() or "love" in tag.lower()][:2])
+            fallback_tags.extend(["romantic", "love"])
         
-        # Add genre tags
-        genre_tags = qloo_proven_tags.get("genre", [])
-        fallback_tags.extend(genre_tags[:2])
-        
-        # Add activity tags
-        activity_tags = qloo_proven_tags.get("activity", [])
-        fallback_tags.extend(activity_tags[:2])
-        
-        return list(set(fallback_tags))[:8]  # Remove duplicates and limit
+        # Remove duplicates and limit
+        unique_tags = list(set(fallback_tags))
+        print(f"[CULTURAL FALLBACK] Final fallback tags: {unique_tags}")
+        return unique_tags
     
     def _parse_context_fallback(self, response: str) -> Dict:
         """Fallback parsing for context analysis"""
@@ -1200,61 +1216,9 @@ class GeminiService:
                 potential_tags.append(tag)
         
         # Return up to 5 tags
-        return potential_tags[:5] if potential_tags else ["pop", "energetic", "upbeat", "mainstream", "popular"]
+        return potential_tags if potential_tags else ["pop", "energetic", "upbeat", "mainstream", "popular"]
     
-    def _generate_fallback_tags(self, context: str, user_country: str = None) -> list:
-        import random
-        import time
-        enhanced_tags = [
-            "romantic", "drama", "comedy", "thriller", "adventure",
-            "sad", "happy", "energetic", "calm", "upbeat",
-            "emotional", "nostalgic", "party", "workout", "study",
-            "mystery", "inspirational", "relaxation", "motivational",
-            "pop", "mainstream", "cultural", "contemporary", "indian",
-            "alternative", "indie", "rock", "electronic", "jazz",
-            "classical", "folk", "country", "blues", "soul",
-            "r&b", "hip_hop", "reggae", "latin", "world",
-            "ambient", "chill", "lounge", "acoustic", "instrumental",
-            "action", "suspense", "family", "reality", "educational",
-            "informative", "knowledge", "learning", "insightful",
-            "business", "entrepreneurship", "success", "professional",
-            "health", "wellness", "fitness", "lifestyle", "self_improvement",
-            "true_crime", "detective", "crime", "fantasy", "magical",
-            "epic", "imaginative", "personal_growth", "biography", "memoir",
-            "real_life", "fiction", "compelling", "engaging", "powerful",
-            "guitar", "band", "rap", "urban", "rhythm", "beats",
-            "dance", "techno", "synth", "smooth", "sophisticated",
-            "instrumental", "classy", "timeless", "orchestral", "elegant"
-        ]
-        random.seed(hash(context + str(int(time.time() * 1000) % 10000)))
-        context_lower = context.lower()
-        if any(word in context_lower for word in ['happy', 'joy', 'excited', 'party', 'celebration']):
-            base_tags = ["happy", "upbeat", "energetic", "party", "celebration", "pop", "mainstream", "contemporary"]
-            additional_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], 2)
-            return base_tags[:6] + additional_tags
-        elif any(word in context_lower for word in ['sad', 'melancholy', 'crying', 'emotional']):
-            base_tags = ["sad", "emotional", "melancholic", "nostalgic", "ballad", "drama", "romantic", "cultural"]
-            additional_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], 2)
-            return base_tags[:6] + additional_tags
-        elif any(word in context_lower for word in ['romantic', 'love', 'passionate', 'intimate']):
-            base_tags = ["romantic", "love", "passionate", "intimate", "ballad", "emotional", "drama", "cultural"]
-            additional_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], 2)
-            return base_tags[:6] + additional_tags
-        elif any(word in context_lower for word in ['workout', 'gym', 'running', 'fitness']):
-            base_tags = ["energetic", "workout", "high_energy", "motivational", "upbeat", "pop", "mainstream", "contemporary"]
-            additional_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], 2)
-            return base_tags[:6] + additional_tags
-        elif any(word in context_lower for word in ['study', 'work', 'focus', 'concentration']):
-            base_tags = ["calm", "ambient", "study", "focus", "relaxation", "emotional", "cultural", "contemporary"]
-            additional_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], 2)
-            return base_tags[:6] + additional_tags
-        elif any(word in context_lower for word in ['explore', 'discover', 'diverse', 'variety']):
-            return random.sample(enhanced_tags, 8)
-        else:
-            base_tags = ["drama", "romantic", "adventure", "comedy", "mystery", "pop", "mainstream", "cultural"]
-            num_replacements = random.randint(2, 3)
-            replacement_tags = random.sample([tag for tag in enhanced_tags if tag not in base_tags], num_replacements)
-            return base_tags[:8-num_replacements] + replacement_tags
+
 
     def analyze_compound_context(self, user_context: str) -> Dict:
         """AI-driven analysis of compound contexts like 'anime songs for study'"""
@@ -1307,6 +1271,65 @@ class GeminiService:
         }
 
     def generate_context_aware_tags(self, user_context: str, user_country: str = None, user_artists: List[str] = None) -> List[str]:
+        """Generate context-aware tags using dynamic AI analysis"""
+        
+        # Use Gemini to dynamically analyze context and generate tags
+        prompt = f"""
+        Analyze this user context and generate 5-8 relevant music tags for recommendations.
+        
+        User Context: "{user_context}"
+        User Country: {user_country or 'Global'}
+        
+        IMPORTANT: Generate tags that are:
+        1. RELEVANT to the specific content mentioned (e.g., "naruto" → anime, japanese, otaku)
+        2. APPROPRIATE for music recommendations
+        3. DIVERSE (mix of genres, moods, styles)
+        4. CULTURALLY RELEVANT to the user's country
+        
+        EXAMPLES:
+        - "i just watch naruto song related to it" → ["anime", "japanese", "otaku", "upbeat", "energetic"]
+        - "feeling blue today" → ["melancholic", "emotional", "sad", "introspective", "drama"]
+        - "romantic dinner music" → ["romantic", "love", "emotional", "calm", "drama"]
+        - "workout playlist" → ["energetic", "upbeat", "workout", "dance", "powerful"]
+        - "study focus music" → ["calm", "focus", "ambient", "instrumental", "relaxing"]
+        
+        Return ONLY a JSON array of tag strings, no other text.
+        Example: ["anime", "japanese", "upbeat", "energetic", "otaku"]
+        """
+        
+        try:
+            response = self._call_gemini(prompt)
+            if response:
+                # Try to parse JSON from response
+                try:
+                    # Extract JSON array from response text
+                    json_start = response.find('[')
+                    json_end = response.rfind(']') + 1
+                    if json_start != -1 and json_end != 0:
+                        json_str = response[json_start:json_end]
+                        tags = json.loads(json_str)
+                        
+                        # Validate tags are strings
+                        if isinstance(tags, list) and all(isinstance(tag, str) for tag in tags):
+                            print(f"[AI TAGS] Dynamically generated {len(tags)} tags: {tags}")
+                            return tags
+                        
+                except json.JSONDecodeError:
+                    pass
+                
+                # Fallback parsing
+                return self._parse_tags_fallback(response)
+            
+        except Exception as e:
+            print(f"Dynamic tag generation error: {e}")
+        
+        # Fallback to basic analysis if dynamic generation fails
+        print(f"[AI TAGS] Using fallback tag generation")
+        
+        # First, analyze the context for mood and emotional state
+        context_analysis = self.analyze_context_fast(user_context)
+        print(f"[AI CONTEXT] Fast analysis: {context_analysis}")
+        
         """Generate context-aware tags using AI analysis instead of hardcoded rules"""
         
         # Analyze the compound context
@@ -1325,7 +1348,7 @@ class GeminiService:
         
         # Add cultural context if available
         if user_country:
-            cultural_context = self.generate_cultural_context(user_country)
+            cultural_context = self.generate_cultural_context(user_country, user_artists=user_artists)
             cultural_elements = cultural_context.get("cultural_elements", [])
             all_elements.extend(cultural_elements[:3])  # Limit cultural elements
         
@@ -1377,3 +1400,104 @@ class GeminiService:
             "energy_level": "medium",
             "confidence": 0.6
         }
+
+    def filter_all_tracks_comprehensive(self, all_tracks: List[Dict], user_context: str, user_country: str, 
+                                       user_artists: List[Dict] = None, user_tracks: List[Dict] = None, 
+                                       context_type: str = "general", location: str = None) -> List[Dict]:
+        """Comprehensive track filtering and ranking using Gemini AI"""
+        try:
+            if not all_tracks:
+                return []
+            
+            # Generate cultural context for better filtering
+            cultural_context = self.generate_cultural_context(user_country, location, user_artists)
+            
+            # Extract artist names for context
+            artist_names = []
+            if user_artists:
+                for artist in user_artists:
+                    if isinstance(artist, dict):
+                        artist_names.append(artist.get('name', str(artist)))
+                    else:
+                        artist_names.append(str(artist))
+            
+            # Create comprehensive prompt for track filtering
+            prompt = f"""
+            Analyze and rank these {len(all_tracks)} tracks based on:
+            - User context: "{user_context}"
+            - User country: {user_country}
+            - Context type: {context_type}
+            - Cultural context: {cultural_context}
+            - User artists: {', '.join(artist_names) if artist_names else 'None'}
+            
+            For each track, consider:
+            1. Relevance to user context and mood
+            2. Cultural appropriateness for {user_country}
+            3. Similarity to user's favorite artists
+            4. Context type match ({context_type})
+            5. Overall quality and popularity
+            
+            Return ONLY a JSON array of track names in order of relevance (most relevant first).
+            Example: ["Track Name 1", "Track Name 2", "Track Name 3", ...]
+            
+            Track list:
+            {[track.get('name', 'Unknown') for track in all_tracks[:20]]}  # Show first 20 tracks
+            """
+            
+            response = self._call_gemini(prompt)
+            if response:
+                try:
+                    # Extract JSON array from response
+                    json_start = response.find('[')
+                    json_end = response.rfind(']') + 1
+                    if json_start != -1 and json_end != 0:
+                        json_str = response[json_start:json_end]
+                        ranked_track_names = json.loads(json_str)
+                        
+                        # Reorder tracks based on Gemini ranking
+                        ranked_tracks = []
+                        track_name_to_track = {track.get('name', '').lower(): track for track in all_tracks}
+                        
+                        for track_name in ranked_track_names:
+                            track_name_lower = track_name.lower()
+                            if track_name_lower in track_name_to_track:
+                                ranked_tracks.append(track_name_to_track[track_name_lower])
+                        
+                        # Add any remaining tracks that weren't ranked
+                        for track in all_tracks:
+                            track_name_lower = track.get('name', '').lower()
+                            if track_name_lower not in [t.get('name', '').lower() for t in ranked_tracks]:
+                                ranked_tracks.append(track)
+                        
+                        print(f"[GEMINI FILTER] Ranked {len(ranked_tracks)} tracks using AI")
+                        return ranked_tracks[:30]  # Return top 30 tracks
+                        
+                except json.JSONDecodeError as e:
+                    print(f"[GEMINI FILTER] JSON parsing error: {e}")
+                    pass
+            
+        except Exception as e:
+            print(f"[GEMINI FILTER] Error in comprehensive filtering: {e}")
+        
+        # Fallback: return original tracks with basic filtering
+        print(f"[GEMINI FILTER] Using fallback filtering for {len(all_tracks)} tracks")
+        
+        # Basic cultural filtering
+        filtered_tracks = []
+        for track in all_tracks:
+            track_name = track.get('name', '').lower()
+            artist_name = track.get('artist', '').lower()
+            
+            # Skip tracks that don't match cultural context
+            if user_country == "IN":
+                # For Indian users, prioritize Indian/Bollywood content
+                if any(keyword in track_name or keyword in artist_name for keyword in 
+                      ['bollywood', 'hindi', 'punjabi', 'indian', 'desi']):
+                    filtered_tracks.append(track)
+                elif len(filtered_tracks) < 20:  # Allow some non-Indian tracks
+                    filtered_tracks.append(track)
+            else:
+                # For other countries, include all tracks
+                filtered_tracks.append(track)
+        
+        return filtered_tracks[:30]  # Return top 30 tracks

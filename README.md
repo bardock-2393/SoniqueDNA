@@ -195,7 +195,20 @@ AI: Analyzes nostalgia context → Cross-references with cultural data → Disco
 
 ## 🔧 API Integration Details
 
-### Qloo Taste AI™ Integration
+### 🎯 Qloo Taste AI™ Integration (Hackathon Focus)
+**SoniqueDNA is built specifically for the Qloo Global Hackathon, showcasing the power of Qloo's Taste AI™ API for cultural intelligence in music discovery.**
+
+#### Key Qloo Features Implemented:
+- **Cross-Domain Cultural Affinities**: Discover music through connections with movies, books, TV shows, and lifestyle preferences
+- **Geographic Cultural Intelligence**: Location-based cultural insights using Qloo's global cultural database
+- **Privacy-First Cultural Data**: Leverage cultural insights without requiring personal user data
+- **Taste AI™ Recommendations**: Advanced recommendation engine using Qloo's cultural intelligence
+- **Cultural Tag Optimization**: Intelligent tag generation specifically optimized for Qloo's API
+
+#### Qloo API Endpoints Used:
+- `insights` - Cultural intelligence and cross-domain recommendations
+- `search` - Entity search across cultural domains
+- `recommendations` - Taste-based artist and content recommendations
 ```python
 class QlooService:
     def get_cross_domain_recommendations(self, tag_ids, domain, limit=10):
@@ -243,11 +256,15 @@ class GeminiService:
 
 ## 🎯 Hackathon Alignment
 
+### 🏆 Qloo Global Hackathon Achievements
+**SoniqueDNA was specifically designed and built for the Qloo Global Hackathon, demonstrating innovative use of Qloo's Taste AI™ API for cultural intelligence in music discovery.**
+
 ### Qloo API Integration
 ✅ **Cultural Intelligence**: Deep integration with Qloo's Taste AI™ for cross-domain insights  
 ✅ **Privacy-First Approach**: Leverages Qloo's privacy-first cultural data  
 ✅ **Cross-Domain Affinities**: Connects music with movies, books, TV shows, and more  
 ✅ **Geographic Context**: Location-based cultural recommendations  
+✅ **Hackathon Innovation**: Novel approach to combining LLMs with cultural intelligence  
 
 ### LLM Integration
 ✅ **Gemini 2.0 Flash**: Advanced context analysis and natural language understanding  

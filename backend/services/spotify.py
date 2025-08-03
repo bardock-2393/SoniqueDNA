@@ -579,13 +579,15 @@ class SpotifyService:
             return []
     
     def get_artist_id(self, artist_name: str, access_token: str) -> Optional[str]:
-        """Get artist ID by name"""
+        """Get artist ID by name with improved search for Indian artists"""
         url = f"{self.base_url}/search"
         headers = {"Authorization": f"Bearer {access_token}"}
+        
+        # Try exact search first
         params = {
             "q": artist_name,
             "type": "artist",
-            "limit": 1
+            "limit": 5  # Get more results to find the best match
         }
         
         try:
@@ -594,18 +596,24 @@ class SpotifyService:
             
             artists = response.json().get("artists", {}).get("items", [])
             if artists:
+                # Find the best match (exact name match first)
+                for artist in artists:
+                    if artist.get("name", "").lower() == artist_name.lower():
+                        return artist.get("id")
+                
+                # If no exact match, return the first result
                 return artists[0].get("id")
             
         except Exception as e:
-            print(f"Artist search error: {e}")
+            print(f"Artist search error for '{artist_name}': {e}")
         
         return None
     
-    def get_artist_top_tracks(self, artist_id: str, access_token: str, limit: int = 5) -> List[Dict]:
+    def get_artist_top_tracks(self, artist_id: str, access_token: str, limit: int = 5, country: str = "IN") -> List[Dict]:
         """Get artist's top tracks from Spotify"""
         url = f"{self.base_url}/artists/{artist_id}/top-tracks"
         headers = {"Authorization": f"Bearer {access_token}"}
-        params = {"country": "US", "limit": limit}
+        params = {"country": country, "limit": limit}
         
         try:
             response = requests.get(url, headers=headers, params=params, timeout=5)

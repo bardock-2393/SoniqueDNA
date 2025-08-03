@@ -70,7 +70,7 @@ def music_recommendation():
         print(f"[AI TAGS] Context-aware tags: {context_tags}")
 
         # Generate cultural context
-        cultural_context = gemini_service.generate_cultural_context(user_country)
+        cultural_context = gemini_service.generate_cultural_context(user_country, user_artists=user_artists)
         print(f"[CULTURAL CONTEXT] Generated: {cultural_context}")
 
         # Create tags from cultural context
@@ -89,7 +89,7 @@ def music_recommendation():
         max_attempts = 10  # Prevent infinite loops
         attempt = 0
         
-        while len(tag_ids) < 5 and attempt < max_attempts:
+        while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
             attempt += 1
             print(f"[QLOO ATTEMPT {attempt}] Trying to get 5 accepted tags...")
             
@@ -102,9 +102,8 @@ def music_recommendation():
             
             print(f"[QLOO ATTEMPT {attempt}] Got {len(tag_ids)} accepted tags so far")
             
-            # If we have 5 or more tags, we're done
-            if len(tag_ids) >= 5:
-                tag_ids = tag_ids[:5]  # Limit to exactly 5
+            # If we have 3 or more tags, we're done (no limit)
+            if len(tag_ids) >= 3:
                 print(f"[SUCCESS] Got {len(tag_ids)} accepted tags after {attempt} attempts")
                 break
             
