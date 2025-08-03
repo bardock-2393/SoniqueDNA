@@ -310,21 +310,14 @@ const MusicDashboard: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
-      
-      const res = await fetch(apiUrl('/musicrecommendation'), {
+              const res = await fetch(apiUrl('/musicrecommendation'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_context: message,
           spotify_token: spotifyToken,
-        }),
-        signal: controller.signal
+        })
       });
-      
-      clearTimeout(timeoutId);
       const data = await res.json();
 
       // Show different loading time based on cache status
@@ -349,19 +342,9 @@ const MusicDashboard: React.FC = () => {
       };
       setMessages(prev => [...prev, aiMessage]);
     } catch (err) {
-      let errorMessage = 'Sorry, there was an error getting your playlist.';
-      
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          errorMessage = 'Request timed out. The server is taking too long to respond. Please try again.';
-        } else if (err.message.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again.';
-        }
-      }
-      
       setMessages(prev => [...prev, {
         id: Date.now().toString() + '_ai',
-        text: errorMessage,
+        text: 'Sorry, there was an error getting your playlist.',
         isUser: false,
         timestamp: new Date()
       }]);
