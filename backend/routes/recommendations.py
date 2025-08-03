@@ -11,6 +11,8 @@ import time
 import hashlib
 import json
 from typing import Dict, List
+import json
+from typing import Dict, List
 
 recommendation_routes = Blueprint('recommendations', __name__)
 spotify_service = SpotifyService()
@@ -69,9 +71,16 @@ def music_recommendation():
         context_tags = gemini_service.generate_context_aware_tags(user_context, user_country, user_artists)
         print(f"[AI TAGS] Context-aware tags: {context_tags}")
 
+        # Step 6: Generate AI-driven context-aware tags
+        context_tags = gemini_service.generate_context_aware_tags(user_context, user_country, user_artists)
+        print(f"[AI TAGS] Context-aware tags: {context_tags}")
+
         # Generate cultural context
         cultural_context = gemini_service.generate_cultural_context(user_country, user_artists=user_artists)
+        cultural_context = gemini_service.generate_cultural_context(user_country, user_artists=user_artists)
         print(f"[CULTURAL CONTEXT] Generated: {cultural_context}")
+
+        # Create tags from cultural context
 
         # Create tags from cultural context
         cultural_tags = cultural_context.get("cultural_elements", []) + cultural_context.get("popular_genres", [])
@@ -79,6 +88,8 @@ def music_recommendation():
         # Combine AI-generated context tags with cultural tags
         all_tags = context_tags + cultural_tags
         all_tags = list(dict.fromkeys(all_tags))  # Remove duplicates
+
+        print(f"[TAGS] AI context tags: {context_tags}")
 
         print(f"[TAGS] AI context tags: {context_tags}")
         print(f"[TAGS] Cultural tags: {cultural_tags}")
@@ -89,6 +100,7 @@ def music_recommendation():
         max_attempts = 10  # Prevent infinite loops
         attempt = 0
         
+        while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
         while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
             attempt += 1
             print(f"[QLOO ATTEMPT {attempt}] Trying to get 5 accepted tags...")
@@ -102,6 +114,8 @@ def music_recommendation():
             
             print(f"[QLOO ATTEMPT {attempt}] Got {len(tag_ids)} accepted tags so far")
             
+            # If we have 3 or more tags, we're done (no limit)
+            if len(tag_ids) >= 3:
             # If we have 3 or more tags, we're done (no limit)
             if len(tag_ids) >= 3:
                 print(f"[SUCCESS] Got {len(tag_ids)} accepted tags after {attempt} attempts")

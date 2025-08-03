@@ -25,7 +25,9 @@ SoniqueDNA is an innovative music discovery platform that leverages the power of
 
 ## 🏗️ Architecture
 
-![SoniqueDNA System Architecture](https://i.ibb.co/Y7TZd9xX/diagram-export-8-1-2025-1-31-50-PM.png)
+![SoniqueDNA System Architecture]
+<img width="2112" height="582" alt="diagram-export-8-1-2025-1_31_50-PM" src="https://github.com/user-attachments/assets/47e4d147-934b-4fe3-af70-36283a86f723" />
+
 
 *System Architecture showing the integration of User Interface, Spotify Integration, AI-Powered Analysis, and Cultural Intelligence modules*
 
