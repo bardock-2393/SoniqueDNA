@@ -1,6 +1,6 @@
-# SoniqueDNA Backend2 - Optimized API
+# SoniqueDNA Backend - Global Music Variety Platform
 
-A high-performance, optimized backend for the SoniqueDNA music recommendation platform using Qloo and Gemini APIs.
+A high-performance, optimized backend for the SoniqueDNA music recommendation platform with global music variety from multiple providers including Spotify, Qloo, Gemini, YouTube Music, Last.fm, and Deezer.
 
 ## 🚀 Performance Features
 
@@ -14,19 +14,23 @@ A high-performance, optimized backend for the SoniqueDNA music recommendation pl
 ## 📁 Architecture
 
 ```
-backend2/
-├── app.py                 # Main Flask app (100 lines)
+backend/
+├── app.py                 # Main Flask app with global variety
 ├── services/
 │   ├── spotify.py        # Optimized Spotify API service
 │   ├── qloo.py          # Optimized Qloo API service
-│   └── gemini.py        # Optimized Gemini API service
+│   ├── gemini.py        # Optimized Gemini API service
+│   ├── music_aggregator.py # Global music variety aggregator
+│   ├── youtube.py       # YouTube Music API service
+│   ├── lastfm.py        # Last.fm API service
+│   └── deezer.py        # Deezer API service
 ├── routes/
 │   ├── auth.py          # Authentication routes
 │   ├── recommendations.py # Main recommendation routes
 │   └── playlists.py     # Playlist management routes
 ├── utils/
 │   └── helpers.py       # Optimized utility functions
-├── requirements.txt     # Minimal dependencies
+├── requirements.txt     # Dependencies with global APIs
 └── env.example         # Environment configuration
 ```
 
@@ -53,7 +57,65 @@ backend2/
    python app.py
    ```
 
+## 🌍 Global Music Variety Features
+
+### New Music Providers
+- **YouTube Music**: Global trending music, cultural content, and mood-based discovery
+- **Last.fm**: Music discovery, artist similarity, and tag-based recommendations  
+- **Deezer**: Additional music variety and genre-based discovery
+- **Music Aggregator**: Intelligent combination of all providers for maximum variety
+
+### Variety Enhancement
+- **Multi-Provider Aggregation**: Combines results from various music sources
+- **Cultural Intelligence**: Culturally relevant recommendations based on user location
+- **Mood-Based Discovery**: Recommendations based on user mood/emotion
+- **Anti-Repetition Algorithm**: Ensures diverse recommendations
+- **Variety Scoring**: Intelligent scoring and deduplication
+
+### Global Categories
+- **Cultural**: Korean, Indian, Latin, African, Japanese, Arabic, European
+- **Mood-Based**: Happy, Sad, Energetic, Romantic, Chill, Aggressive
+- **Regional**: Global, Asia, Europe, Americas, Africa, Oceania
+
 ## 🔑 API Endpoints
+
+### Global Music Variety Endpoints
+
+#### `POST /global-music-variety`
+Get global music variety from multiple providers
+```json
+{
+  "category": "korean",
+  "mood": "happy", 
+  "region": "KR",
+  "limit": 30,
+  "variety_boost": true
+}
+```
+
+#### `POST /cultural-music-variety`
+Get cultural music variety
+```json
+{
+  "culture": "korean",
+  "limit": 25
+}
+```
+
+#### `POST /mood-music-variety`
+Get mood-based music variety
+```json
+{
+  "mood": "energetic",
+  "limit": 25
+}
+```
+
+#### `GET /music-variety-stats`
+Get comprehensive variety statistics
+
+#### `GET /available-music-categories`
+Get all available categories and moods
 
 ### Authentication & User Management
 
@@ -217,6 +279,10 @@ GEMINI_API_KEY=your_gemini_key
 # Qloo API
 QLOO_API_KEY=your_qloo_key
 
+# Global Music Variety APIs
+YOUTUBE_API_KEY=your_youtube_api_key
+LASTFM_API_KEY=your_lastfm_api_key
+
 # Rate Limiting
 SPOTIFY_RATE_LIMIT_DELAY=0.03
 QLOO_RATE_LIMIT_DELAY=0.05
@@ -271,6 +337,10 @@ All endpoints include response time in their analysis:
 - **Memory Usage**: 50% less than original backend
 - **API Calls**: 70% fewer API calls per request
 - **Error Rate**: < 5% error rate
+- **Global Variety**: 6 music providers (Spotify, Qloo, YouTube, Last.fm, Deezer, Gemini)
+- **Cultural Coverage**: 7+ cultural categories
+- **Mood Categories**: 6+ mood-based categories
+- **Variety Enhancement**: Anti-repetition and intelligent scoring
 
 ## 📝 License
 

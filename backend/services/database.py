@@ -709,29 +709,7 @@ class DatabaseService:
         conn.commit()
         conn.close()
     
-    def get_user_mood_preferences(self, user_id: str) -> List[Dict]:
-        """Get user mood preferences"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT mood, preference_score, context_count, last_updated
-            FROM user_mood_preferences 
-            WHERE user_id = ?
-            ORDER BY preference_score DESC
-        ''', (user_id,))
-        
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                'mood': row[0],
-                'preference_score': row[1],
-                'context_count': row[2],
-                'last_updated': row[3]
-            })
-        
-        conn.close()
-        return results
+
     
     def delete_history_item(self, history_id: int, user_id: str) -> bool:
         """Delete a specific history item for a user"""

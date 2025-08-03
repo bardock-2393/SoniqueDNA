@@ -51,13 +51,6 @@ def music_recommendation():
         # Step 2: Create user session for tracking
         session_id = db_service.create_user_session(user_id, spotify_token, user_country, user_context)
         
-        # Step 3: Check cache first
-        cache_key = hashlib.md5(f"{user_id}_{user_context}_{user_country}".encode()).hexdigest()
-        cached_result = db_service.get_cached_recommendation(cache_key)
-        if cached_result:
-            print(f"[CACHE HIT] Returning cached result for user {user_id}")
-            return jsonify(cached_result)
-        
         # Step 4: Analyze context with Gemini
         context_analysis = gemini_service.analyze_context_fast(user_context)
         print(f"[CONTEXT] Analysis: {context_analysis}")
@@ -74,7 +67,7 @@ def music_recommendation():
         print(f"[AI TAGS] Context-aware tags: {context_tags}")
 
         # Generate cultural context
-        cultural_context = gemini_service.generate_cultural_context(user_country)
+        cultural_context = gemini_service.generate_cultural_context(user_country, user_artists=user_artists)
         print(f"[CULTURAL CONTEXT] Generated: {cultural_context}")
 
         # Create tags from cultural context
@@ -93,7 +86,7 @@ def music_recommendation():
         max_attempts = 10  # Prevent infinite loops
         attempt = 0
         
-        while len(tag_ids) < 5 and attempt < max_attempts:
+        while len(tag_ids) < 3 and attempt < max_attempts:  # Reduced minimum requirement
             attempt += 1
             print(f"[QLOO ATTEMPT {attempt}] Trying to get 5 accepted tags...")
             
@@ -106,9 +99,8 @@ def music_recommendation():
             
             print(f"[QLOO ATTEMPT {attempt}] Got {len(tag_ids)} accepted tags so far")
             
-            # If we have 5 or more tags, we're done
-            if len(tag_ids) >= 5:
-                tag_ids = tag_ids[:5]  # Limit to exactly 5
+            # If we have 3 or more tags, we're done (no limit)
+            if len(tag_ids) >= 3:
                 print(f"[SUCCESS] Got {len(tag_ids)} accepted tags after {attempt} attempts")
                 break
             
@@ -262,10 +254,6 @@ def music_recommendation():
                 "recommendation_method": "user_signals" if user_artist_ids or user_track_ids else "tag_based"
             }
         }
-        
-        # Step 17: Cache the result
-        artist_names = [rec.get("name", "") for rec in recommendations if rec.get("name")]
-        db_service.store_cached_recommendation(cache_key, user_context, user_country, artist_names, response_data)
         
         print(f"[SUCCESS] Music recommendations completed in {round(response_time, 2)}s")
         return jsonify(response_data)

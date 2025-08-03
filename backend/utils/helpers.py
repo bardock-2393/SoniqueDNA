@@ -122,68 +122,6 @@ def get_fallback_recommendations(context_type: str) -> List[Dict]:
     
     return fallback_data.get(context_type, fallback_data["party"])
 
-def sort_by_relevance(entities: List[Dict], user_preferences: Dict = None) -> List[Dict]:
-    """Sort entities by relevance to user preferences"""
-    if not entities:
-        return []
-    
-    # Simple relevance scoring
-    for entity in entities:
-        relevance_score = 0.0
-        
-        # Base score from popularity
-        popularity = entity.get('popularity', 0.5)
-        relevance_score += popularity * 0.3
-        
-        # Genre match bonus
-        if user_preferences and 'genres' in user_preferences:
-            user_genres = [g.lower() for g in user_preferences['genres']]
-            entity_genre = entity.get('primary_genre', '').lower()
-            if entity_genre in user_genres:
-                relevance_score += 0.4
-        
-        # Artist match bonus
-        if user_preferences and 'artists' in user_preferences:
-            user_artists = [a.lower() for a in user_preferences['artists']]
-            entity_artist = entity.get('name', '').lower()
-            if entity_artist in user_artists:
-                relevance_score += 0.3
-        
-        entity['relevance_score'] = relevance_score
-    
-    # Sort by relevance score
-    return sorted(entities, key=lambda x: x.get('relevance_score', 0), reverse=True)
-
-def get_context_keywords(context_type: str) -> List[str]:
-    """Get keywords for context type"""
-    context_keywords = {
-        "workout": ["energetic", "motivational", "pump", "energy", "fast"],
-        "study": ["focus", "concentration", "calm", "ambient", "instrumental"],
-        "party": ["dance", "upbeat", "fun", "celebration", "vibe"],
-        "relaxation": ["chill", "calm", "peaceful", "ambient", "soft"],
-        "romantic": ["love", "romantic", "intimate", "passionate", "sweet"],
-        "general": ["popular", "mainstream", "trending", "hit", "chart"]
-    }
-    
-    return context_keywords.get(context_type, ["popular", "mainstream"])
-
-def get_cultural_keywords(user_country: str, location: str = None) -> List[str]:
-    """Get cultural keywords for location"""
-    cultural_keywords = {
-        "US": ["american", "pop", "hip hop", "country"],
-        "UK": ["british", "pop", "rock", "indie"],
-        "JP": ["japanese", "j-pop", "j-rock", "anime"],
-        "KR": ["korean", "k-pop", "k-hip hop"],
-        "IN": ["indian", "bollywood", "indian pop"],
-        "BR": ["brazilian", "samba", "bossa nova"],
-        "MX": ["mexican", "mexican pop", "ranchera"],
-        "FR": ["french", "french pop", "chanson"],
-        "DE": ["german", "german pop", "schlager"],
-        "IT": ["italian", "italian pop", "opera"]
-    }
-    
-    return cultural_keywords.get(user_country.upper(), ["international", "global"])
-
 def validate_input_data(data: Dict) -> Tuple[bool, str]:
     """Validate input data for recommendations"""
     required_fields = ['user_context', 'user_country']

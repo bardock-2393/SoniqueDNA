@@ -1,4 +1,12 @@
 flask==2.3.3
 flask-cors==4.0.0
 requests==2.31.0
-python-dotenv==1.0.0 
+python-dotenv==1.0.0
+# Additional music providers and global APIs
+google-api-python-client==2.108.0
+deezer-python==1.4.0
+pylast==4.4.0
+musicbrainzngs==0.7.1
+genius-lyrics==1.3
+wikipedia-api==0.6.0
+beautifulsoup4==4.12.2 
